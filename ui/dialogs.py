@@ -1,17 +1,18 @@
 """
 ui/dialogs.py
-Dialogues modaux - Thème CLAIR.
+Dialogues modaux - Thème CLAIR, couleur et image.
 """
 
 import customtkinter as ctk
-from tkinter import messagebox
+from tkinter import messagebox, colorchooser, filedialog
 from typing import Optional, Callable
 from models import Goal, Task
 from services import GoalService
-
+from PIL import Image
+import os
 
 class GoalDialog(ctk.CTkToplevel):
-    """Dialogue Goal - Design clair."""
+    """Dialogue Goal avec couleur et image."""
 
     def __init__(
         self,
@@ -26,9 +27,13 @@ class GoalDialog(ctk.CTkToplevel):
         self.goal = goal
         self.on_save = on_save
         self.is_edit = goal is not None
+        self.selected_color = goal.color if goal else "#3B82F6"
+        self.selected_image_path = goal.image_path if goal else None
+        self.temp_image_path = None
+        self._current_image = None
 
         self.title("Modifier l'objectif" if self.is_edit else "Nouvel objectif")
-        self.geometry("500x520")
+        self.geometry("520x650")
         self.resizable(False, False)
         self.transient(master)
         self.grab_set()
@@ -39,23 +44,20 @@ class GoalDialog(ctk.CTkToplevel):
         if self.is_edit:
             self._fill_form()
 
-    def _build_form(self) -> None:
-        # Utiliser grid sur le toplevel directement
+    def _build_form(self):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=0)
 
-        # Zone scrollable pour le contenu
         scroll_frame = ctk.CTkScrollableFrame(self, fg_color="#FFFFFF", corner_radius=0)
         scroll_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=(20, 10))
 
-        # Titre du dialogue
         ctk.CTkLabel(
             scroll_frame,
             text="Modifier l'objectif" if self.is_edit else "Nouvel objectif",
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color="#1E293B"
-        ).pack(anchor="w", pady=(0, 15))
+        ).pack(anchor="w", pady=(0, 20))
 
         # Titre
         ctk.CTkLabel(
@@ -68,7 +70,7 @@ class GoalDialog(ctk.CTkToplevel):
         self.title_entry = ctk.CTkEntry(
             scroll_frame,
             placeholder_text="Nom de l'objectif...",
-            height=38,
+            height=40,
             corner_radius=8,
             border_width=1,
             border_color="#E2E8F0",
@@ -76,7 +78,7 @@ class GoalDialog(ctk.CTkToplevel):
             text_color="#1E293B",
             font=ctk.CTkFont(size=12)
         )
-        self.title_entry.pack(fill="x", pady=(0, 12))
+        self.title_entry.pack(fill="x", pady=(0, 15))
 
         # Description
         ctk.CTkLabel(
@@ -97,7 +99,7 @@ class GoalDialog(ctk.CTkToplevel):
             text_color="#1E293B",
             font=ctk.CTkFont(size=12)
         )
-        self.desc_text.pack(fill="x", pady=(0, 12))
+        self.desc_text.pack(fill="x", pady=(0, 15))
 
         # Date cible
         ctk.CTkLabel(
@@ -110,7 +112,7 @@ class GoalDialog(ctk.CTkToplevel):
         self.target_entry = ctk.CTkEntry(
             scroll_frame,
             placeholder_text="Optionnel...",
-            height=38,
+            height=40,
             corner_radius=8,
             border_width=1,
             border_color="#E2E8F0",
@@ -118,7 +120,82 @@ class GoalDialog(ctk.CTkToplevel):
             text_color="#1E293B",
             font=ctk.CTkFont(size=12)
         )
-        self.target_entry.pack(fill="x", pady=(0, 12))
+        self.target_entry.pack(fill="x", pady=(0, 15))
+
+        # ─── COULEUR ───
+        ctk.CTkLabel(
+            scroll_frame,
+            text="🎨 Couleur",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="#475569"
+        ).pack(anchor="w", pady=(0, 10))
+
+        self.color_btn = ctk.CTkButton(
+            scroll_frame,
+            text="Choisir une couleur",
+            height=40,
+            corner_radius=8,
+            fg_color=self.selected_color,
+            hover_color=self.selected_color,
+            text_color="#FFFFFF",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._choose_color
+        )
+        self.color_btn.pack(fill="x", pady=(0, 15))
+
+        # ─── IMAGE ───
+        ctk.CTkLabel(
+            scroll_frame,
+            text="🖼️ Image",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="#475569"
+        ).pack(anchor="w", pady=(0, 10))
+
+        # Frame pour l'image
+        self.image_frame = ctk.CTkFrame(
+            scroll_frame,
+            fg_color="#F8FAFC",
+            corner_radius=12,
+            height=150
+        )
+        self.image_frame.pack(fill="x", pady=(0, 5))
+        self.image_frame.pack_propagate(False)
+
+        self.image_label = ctk.CTkLabel(
+            self.image_frame,
+            text="Aucune image",
+            font=ctk.CTkFont(size=12),
+            text_color="#94A3B8"
+        )
+        self.image_label.pack(expand=True)
+
+        # Boutons image
+        img_btn_frame = ctk.CTkFrame(scroll_frame, fg_color="transparent")
+        img_btn_frame.pack(fill="x", pady=(0, 15))
+
+        ctk.CTkButton(
+            img_btn_frame,
+            text="📁 Choisir une image",
+            height=35,
+            corner_radius=8,
+            fg_color="#F1F5F9",
+            hover_color="#E2E8F0",
+            text_color="#475569",
+            font=ctk.CTkFont(size=12),
+            command=self._choose_image
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            img_btn_frame,
+            text="🗑️ Supprimer",
+            height=35,
+            corner_radius=8,
+            fg_color="#FEE2E2",
+            hover_color="#FECACA",
+            text_color="#DC2626",
+            font=ctk.CTkFont(size=12),
+            command=self._remove_image
+        ).pack(side="left")
 
         # Priorité
         ctk.CTkLabel(
@@ -129,7 +206,6 @@ class GoalDialog(ctk.CTkToplevel):
         ).pack(anchor="w", pady=(0, 5))
 
         self.priority_var = ctk.StringVar(value="Moyenne")
-        # CTkSegmentedButton avec arguments compatibles
         priorities = ctk.CTkSegmentedButton(
             scroll_frame,
             values=["Faible", "Moyenne", "Haute"],
@@ -144,9 +220,9 @@ class GoalDialog(ctk.CTkToplevel):
             text_color="#475569",
             font=ctk.CTkFont(size=12, weight="bold")
         )
-        priorities.pack(fill="x", pady=(0, 12))
+        priorities.pack(fill="x", pady=(0, 15))
 
-        # Statut (édition uniquement)
+        # Statut (édition)
         if self.is_edit:
             ctk.CTkLabel(
                 scroll_frame,
@@ -160,7 +236,7 @@ class GoalDialog(ctk.CTkToplevel):
                 scroll_frame,
                 values=["Non commencé", "En cours", "Terminé"],
                 variable=self.status_var,
-                height=38,
+                height=40,
                 corner_radius=8,
                 fg_color="#F8FAFC",
                 button_color="#E2E8F0",
@@ -169,21 +245,19 @@ class GoalDialog(ctk.CTkToplevel):
                 dropdown_text_color="#1E293B",
                 dropdown_hover_color="#F1F5F9",
                 font=ctk.CTkFont(size=12)
-            ).pack(fill="x", pady=(0, 12))
+            ).pack(fill="x", pady=(0, 15))
 
-        # Boutons fixes en bas (hors scrollable)
+        # Boutons
         btn_frame = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=0, height=70)
         btn_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 20))
         btn_frame.grid_propagate(False)
         btn_frame.grid_columnconfigure((0, 1), weight=1)
 
-        # Ligne de séparation
         ctk.CTkFrame(btn_frame, height=1, fg_color="#E2E8F0").grid(
             row=0, column=0, columnspan=2, sticky="ew", pady=(0, 15)
         )
 
-        # Bouton Annuler
-        btn_cancel = ctk.CTkButton(
+        ctk.CTkButton(
             btn_frame,
             text="Annuler",
             command=self.destroy,
@@ -193,11 +267,9 @@ class GoalDialog(ctk.CTkToplevel):
             hover_color="#E2E8F0",
             text_color="#475569",
             font=ctk.CTkFont(size=12, weight="bold")
-        )
-        btn_cancel.grid(row=1, column=0, sticky="ew", padx=(0, 8))
+        ).grid(row=1, column=0, sticky="ew", padx=(0, 8))
 
-        # Bouton Enregistrer
-        btn_save = ctk.CTkButton(
+        ctk.CTkButton(
             btn_frame,
             text="💾 Enregistrer",
             command=self._save,
@@ -207,10 +279,67 @@ class GoalDialog(ctk.CTkToplevel):
             hover_color="#2563EB",
             text_color="#FFFFFF",
             font=ctk.CTkFont(size=12, weight="bold")
-        )
-        btn_save.grid(row=1, column=1, sticky="ew", padx=(8, 0))
+        ).grid(row=1, column=1, sticky="ew", padx=(8, 0))
 
-    def _fill_form(self) -> None:
+    def _choose_color(self):
+        color = colorchooser.askcolor(title="Choisir une couleur", color=self.selected_color)
+        if color[1]:
+            self.selected_color = color[1]
+            self.color_btn.configure(fg_color=self.selected_color, hover_color=self.selected_color)
+
+    def _choose_image(self):
+        """Ouvre un sélecteur de fichier pour choisir une image."""
+        filetypes = [
+            ("Images", "*.png *.jpg *.jpeg *.gif *.bmp"),
+            ("PNG", "*.png"),
+            ("JPEG", "*.jpg *.jpeg"),
+            ("Tous fichiers", "*.*")
+        ]
+        path = filedialog.askopenfilename(title="Choisir une image", filetypes=filetypes)
+        if path:
+            self.temp_image_path = path
+            self._display_image(path)
+
+    def _remove_image(self):
+        """Supprime l'image sélectionnée."""
+        self.temp_image_path = None
+        self.selected_image_path = None
+        for widget in self.image_frame.winfo_children():
+            widget.destroy()
+        self.image_label = ctk.CTkLabel(
+            self.image_frame,
+            text="Aucune image",
+            font=ctk.CTkFont(size=12),
+            text_color="#94A3B8"
+        )
+        self.image_label.pack(expand=True)
+
+    def _display_image(self, path: str):
+        """Affiche l'image dans le frame."""
+        try:
+            for widget in self.image_frame.winfo_children():
+                widget.destroy()
+
+            img = Image.open(path)
+            img.thumbnail((280, 130))
+
+            ctk_image = ctk.CTkImage(light_image=img, dark_image=img, size=img.size)
+
+            label = ctk.CTkLabel(self.image_frame, text="", image=ctk_image)
+            label.pack(expand=True)
+
+            self._current_image = ctk_image
+
+        except Exception as e:
+            self.image_label = ctk.CTkLabel(
+                self.image_frame,
+                text=f"Erreur: {str(e)}",
+                font=ctk.CTkFont(size=11),
+                text_color="#EF4444"
+            )
+            self.image_label.pack(expand=True)
+
+    def _fill_form(self):
         if not self.goal:
             return
 
@@ -219,8 +348,14 @@ class GoalDialog(ctk.CTkToplevel):
         if self.goal.target_date:
             self.target_entry.insert(0, self.goal.target_date.strftime("%Y-%m-%d"))
         self.priority_var.set(self.goal.priority)
+        self.selected_color = self.goal.color
+        self.color_btn.configure(fg_color=self.selected_color, hover_color=self.selected_color)
 
-    def _save(self) -> None:
+        if self.goal.image_path and os.path.exists(self.goal.image_path):
+            self.selected_image_path = self.goal.image_path
+            self._display_image(self.goal.image_path)
+
+    def _save(self):
         title = self.title_entry.get().strip()
         if not title:
             messagebox.showerror("Erreur", "Le titre est obligatoire")
@@ -229,9 +364,16 @@ class GoalDialog(ctk.CTkToplevel):
         description = self.desc_text.get("0.0", "end").strip()
         target_date = self.target_entry.get().strip() or None
         priority = self.priority_var.get()
+        color = self.selected_color
 
         try:
             if self.is_edit:
+                final_image_path = self.selected_image_path
+                if self.temp_image_path:
+                    final_image_path = self.service.save_goal_image(self.goal.id, self.temp_image_path)
+                    if self.goal.image_path and self.goal.image_path != final_image_path:
+                        self.service.delete_goal_image(self.goal.image_path)
+
                 status = self.status_var.get()
                 self.service.update_goal(
                     self.goal.id,
@@ -239,15 +381,24 @@ class GoalDialog(ctk.CTkToplevel):
                     description=description,
                     target_date=target_date,
                     priority=priority,
-                    status=status
+                    status=status,
+                    color=color,
+                    image_path=final_image_path
                 )
             else:
-                self.service.create_goal(
+                new_goal = self.service.create_goal(
                     title=title,
                     description=description,
                     target_date=target_date,
-                    priority=priority
+                    priority=priority,
+                    color=color,
+                    image_path=None
                 )
+
+                final_image_path = None
+                if self.temp_image_path:
+                    final_image_path = self.service.save_goal_image(new_goal.id, self.temp_image_path)
+                    self.service.update_goal(new_goal.id, image_path=final_image_path)
 
             if self.on_save:
                 self.on_save()
@@ -257,8 +408,12 @@ class GoalDialog(ctk.CTkToplevel):
             messagebox.showerror("Erreur", str(e))
 
 
+# ═══════════════════════════════════════════════════
+# TASK DIALOG - CLASSE SÉPARÉE
+# ═══════════════════════════════════════════════════
+
 class TaskDialog(ctk.CTkToplevel):
-    """Dialogue Task - Design clair."""
+    """Dialogue Task."""
 
     def __init__(
         self,
@@ -288,13 +443,11 @@ class TaskDialog(ctk.CTkToplevel):
         if self.is_edit:
             self._fill_form()
 
-    def _build_form(self) -> None:
-        # Grid sur le toplevel
+    def _build_form(self):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=0)
 
-        # Zone scrollable
         scroll_frame = ctk.CTkScrollableFrame(self, fg_color="#FFFFFF", corner_radius=0)
         scroll_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=(20, 10))
 
@@ -303,9 +456,8 @@ class TaskDialog(ctk.CTkToplevel):
             text="Modifier la tâche" if self.is_edit else "Nouvelle tâche",
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color="#1E293B"
-        ).pack(anchor="w", pady=(0, 15))
+        ).pack(anchor="w", pady=(0, 20))
 
-        # Nom
         ctk.CTkLabel(
             scroll_frame,
             text="Nom de la tâche *",
@@ -316,7 +468,7 @@ class TaskDialog(ctk.CTkToplevel):
         self.name_entry = ctk.CTkEntry(
             scroll_frame,
             placeholder_text="Nom...",
-            height=38,
+            height=40,
             corner_radius=8,
             border_width=1,
             border_color="#E2E8F0",
@@ -324,9 +476,8 @@ class TaskDialog(ctk.CTkToplevel):
             text_color="#1E293B",
             font=ctk.CTkFont(size=12)
         )
-        self.name_entry.pack(fill="x", pady=(0, 12))
+        self.name_entry.pack(fill="x", pady=(0, 15))
 
-        # Description
         ctk.CTkLabel(
             scroll_frame,
             text="Description",
@@ -345,9 +496,8 @@ class TaskDialog(ctk.CTkToplevel):
             text_color="#1E293B",
             font=ctk.CTkFont(size=12)
         )
-        self.desc_text.pack(fill="x", pady=(0, 12))
+        self.desc_text.pack(fill="x", pady=(0, 15))
 
-        # Statut (édition)
         if self.is_edit:
             ctk.CTkLabel(
                 scroll_frame,
@@ -361,7 +511,7 @@ class TaskDialog(ctk.CTkToplevel):
                 scroll_frame,
                 values=["À faire", "En cours", "Terminée"],
                 variable=self.status_var,
-                height=38,
+                height=40,
                 corner_radius=8,
                 fg_color="#F8FAFC",
                 button_color="#E2E8F0",
@@ -370,9 +520,8 @@ class TaskDialog(ctk.CTkToplevel):
                 dropdown_text_color="#1E293B",
                 dropdown_hover_color="#F1F5F9",
                 font=ctk.CTkFont(size=12)
-            ).pack(fill="x", pady=(0, 12))
+            ).pack(fill="x", pady=(0, 15))
 
-        # Boutons fixes en bas
         btn_frame = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=0, height=70)
         btn_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 20))
         btn_frame.grid_propagate(False)
@@ -382,7 +531,7 @@ class TaskDialog(ctk.CTkToplevel):
             row=0, column=0, columnspan=2, sticky="ew", pady=(0, 15)
         )
 
-        btn_cancel = ctk.CTkButton(
+        ctk.CTkButton(
             btn_frame,
             text="Annuler",
             command=self.destroy,
@@ -392,10 +541,9 @@ class TaskDialog(ctk.CTkToplevel):
             hover_color="#E2E8F0",
             text_color="#475569",
             font=ctk.CTkFont(size=12, weight="bold")
-        )
-        btn_cancel.grid(row=1, column=0, sticky="ew", padx=(0, 8))
+        ).grid(row=1, column=0, sticky="ew", padx=(0, 8))
 
-        btn_save = ctk.CTkButton(
+        ctk.CTkButton(
             btn_frame,
             text="💾 Enregistrer",
             command=self._save,
@@ -405,16 +553,15 @@ class TaskDialog(ctk.CTkToplevel):
             hover_color="#2563EB",
             text_color="#FFFFFF",
             font=ctk.CTkFont(size=12, weight="bold")
-        )
-        btn_save.grid(row=1, column=1, sticky="ew", padx=(8, 0))
+        ).grid(row=1, column=1, sticky="ew", padx=(8, 0))
 
-    def _fill_form(self) -> None:
+    def _fill_form(self):
         if not self.task:
             return
         self.name_entry.insert(0, self.task.name)
         self.desc_text.insert("0.0", self.task.description)
 
-    def _save(self) -> None:
+    def _save(self):
         name = self.name_entry.get().strip()
         if not name:
             messagebox.showerror("Erreur", "Le nom est obligatoire")

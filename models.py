@@ -1,9 +1,9 @@
 """
 models.py
-Modèles de données représentant les entités Goals et Tasks.
-Utilise des dataclasses pour un code propre et typé.
+Modèles de données avec color et image_path.
 """
 
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
@@ -19,15 +19,15 @@ class Goal:
     description: str = ""
     created_at: datetime = field(default_factory=datetime.now)
     target_date: Optional[datetime] = None
-    priority: str = "Moyenne"  # Faible, Moyenne, Haute
-    status: str = "Non commencé"  # Non commencé, En cours, Terminé
+    priority: str = "Moyenne"
+    status: str = "Non commencé"
+    color: str = "#3B82F6"
+    image_path: Optional[str] = None
 
-    # Constantes pour validation
     VALID_PRIORITIES = {"Faible", "Moyenne", "Haute"}
     VALID_STATUSES = {"Non commencé", "En cours", "Terminé"}
 
     def __post_init__(self):
-        """Validation post-instanciation."""
         if self.priority not in self.VALID_PRIORITIES:
             raise ValueError(f"Priorité invalide : {self.priority}")
         if self.status not in self.VALID_STATUSES:
@@ -35,12 +35,10 @@ class Goal:
 
     @property
     def is_completed(self) -> bool:
-        """Vérifie si le goal est terminé."""
         return self.status == "Terminé"
 
     @property
     def is_overdue(self) -> bool:
-        """Vérifie si le goal a dépassé sa date cible."""
         if self.target_date is None:
             return False
         return datetime.now() > self.target_date and not self.is_completed
@@ -55,11 +53,12 @@ class Goal:
             created_at=datetime.fromisoformat(row["created_at"]),
             target_date=datetime.fromisoformat(row["target_date"]) if row["target_date"] else None,
             priority=row["priority"],
-            status=row["status"]
+            status=row["status"],
+            color=row["color"] if row["color"] else "#3B82F6",
+            image_path=row["image_path"] if row["image_path"] else None
         )
 
     def to_dict(self) -> dict:
-        """Sérialise le goal en dictionnaire."""
         return {
             "id": self.id,
             "title": self.title,
@@ -67,7 +66,9 @@ class Goal:
             "created_at": self.created_at.isoformat(),
             "target_date": self.target_date.isoformat() if self.target_date else None,
             "priority": self.priority,
-            "status": self.status
+            "status": self.status,
+            "color": self.color,
+            "image_path": self.image_path
         }
 
 
@@ -80,24 +81,21 @@ class Task:
     goal_id: int
     name: str
     description: str = ""
-    status: str = "À faire"  # À faire, En cours, Terminée
+    status: str = "À faire"
     created_at: datetime = field(default_factory=datetime.now)
 
     VALID_STATUSES = {"À faire", "En cours", "Terminée"}
 
     def __post_init__(self):
-        """Validation post-instanciation."""
         if self.status not in self.VALID_STATUSES:
             raise ValueError(f"Statut de tâche invalide : {self.status}")
 
     @property
     def is_completed(self) -> bool:
-        """Vérifie si la tâche est terminée."""
         return self.status == "Terminée"
 
     @classmethod
     def from_db_row(cls, row) -> "Task":
-        """Crée une Task à partir d'une ligne SQLite."""
         return cls(
             id=row["id"],
             goal_id=row["goal_id"],
@@ -108,7 +106,6 @@ class Task:
         )
 
     def to_dict(self) -> dict:
-        """Sérialise la tâche en dictionnaire."""
         return {
             "id": self.id,
             "goal_id": self.goal_id,

@@ -235,12 +235,11 @@ class GoalDetailView(ctk.CTkFrame):
 
     def _refresh_tasks_list(self) -> None:
         """Recharge la liste des tâches avec gestion sécurisée des widgets."""
-        # Désactiver temporairement le parent pour éviter les erreurs de destruction
         for widget in self.tasks_scroll.winfo_children():
             try:
                 widget.destroy()
             except Exception:
-                pass  # Ignorer les erreurs de destruction
+                pass
 
         tasks = self.service.list_tasks(self.goal.id)
 
@@ -269,7 +268,6 @@ class GoalDetailView(ctk.CTkFrame):
         row.pack(fill="x", pady=3)
 
         # ─── BOUTON TOGGLE AU LIEU DE CHECKBOX (évite le bug CustomTkinter) ───
-        # Créer un bouton qui change d'apparence selon le statut
         if task.is_completed:
             toggle_btn = ctk.CTkButton(
                 row,

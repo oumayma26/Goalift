@@ -1,20 +1,31 @@
 """
 ui/dashboard_view.py
-Tableau de bord affichant les statistiques globales et les graphiques
-de progression avec Matplotlib intégré dans CustomTkinter.
+Tableau de bord avec style Glassmorphism et statistiques temporelles.
 """
 
 import customtkinter as ctk
 from typing import Callable
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib import rcParams
+import numpy as np
 from services import GoalService
+# Import matplotlib
+import matplotlib.pyplot as plt
+
+# Configuration Matplotlib pour thème clair
+rcParams['text.color'] = '#1E293B'
+rcParams['axes.labelcolor'] = '#475569'
+rcParams['xtick.color'] = '#64748B'
+rcParams['ytick.color'] = '#64748B'
+rcParams['axes.edgecolor'] = '#E2E8F0'
+rcParams['axes.facecolor'] = '#FFFFFF'
+rcParams['figure.facecolor'] = '#F8FAFC'
 
 
 class DashboardView(ctk.CTkFrame):
     """
-    Vue du tableau de bord avec statistiques globales et visualisations.
-    S'intègre dans le panneau droit de la fenêtre principale.
+    Vue du tableau de bord avec style Glassmorphism.
     """
 
     def __init__(
@@ -24,247 +35,296 @@ class DashboardView(ctk.CTkFrame):
         on_navigate_goals: Callable,
         **kwargs
     ) -> None:
-        super().__init__(master, **kwargs)
+        super().__init__(master, fg_color="#F1F5F9", **kwargs)
 
         self.service = service
         self.on_navigate_goals = on_navigate_goals
 
         self.grid_columnconfigure((0, 1, 2), weight=1)
-        self.grid_rowconfigure(1, weight=1)
-        self.grid_rowconfigure(3, weight=1)
+        self.grid_rowconfigure(1, weight=0)
+        self.grid_rowconfigure(2, weight=1)
 
         self._build_header()
         self._build_stats_cards()
         self._build_charts()
-        self._build_recent_activity()
 
     # ───────────────────────────────────────────────
-    # En-tête du Dashboard
+    # En-tête
     # ───────────────────────────────────────────────
 
     def _build_header(self) -> None:
-        """Construit l'en-tête avec titre et bouton de navigation."""
+        """En-tête du dashboard."""
         header = ctk.CTkFrame(self, fg_color="transparent")
-        header.grid(row=0, column=0, columnspan=3, sticky="ew", padx=15, pady=15)
-        header.grid_columnconfigure(0, weight=1)
+        header.grid(row=0, column=0, columnspan=3, sticky="ew", padx=20, pady=(20, 10))
 
         ctk.CTkLabel(
             header,
-            text="📊 Tableau de Bord",
-            font=ctk.CTkFont(size=28, weight="bold")
-        ).grid(row=0, column=0, sticky="w")
+            text="📊 Tableau de bord",
+            font=ctk.CTkFont(size=28, weight="bold"),
+            text_color="#1E293B"
+        ).pack(side="left")
 
         ctk.CTkButton(
             header,
-            text="🎯 Voir mes Goals",
+            text="🎯 Voir mes objectifs",
             command=self.on_navigate_goals,
-            width=150,
-            height=35
-        ).grid(row=0, column=1, sticky="e")
+            width=160,
+            height=40,
+            corner_radius=12,
+            fg_color="#3B82F6",
+            hover_color="#2563EB",
+            text_color="#FFFFFF",
+            font=ctk.CTkFont(size=13, weight="bold")
+        ).pack(side="right")
 
     # ───────────────────────────────────────────────
-    # Cartes de Statistiques
+    # Cartes de statistiques (Glassmorphism)
     # ───────────────────────────────────────────────
 
     def _build_stats_cards(self) -> None:
-        """Construit les 6 cartes de statistiques principales."""
-        stats = self.service.get_dashboard_stats()
+        """Cartes de stats avec style glassmorphism."""
+        yearly = self.service.get_yearly_stats()
+        monthly = self.service.get_monthly_stats()
+        current_year = __import__('datetime').datetime.now().year
 
         cards_data = [
-            ("🎯", "Goals Total", stats["total_goals"], "#3B82F6"),
-            ("✅", "Goals Terminés", stats["goals_completed"], "#10B981"),
-            ("🔄", "Goals En Cours", stats["goals_in_progress"], "#F59E0B"),
-            ("📋", "Tâches Total", stats["total_tasks"], "#8B5CF6"),
-            ("✔️", "Tâches Terminées", stats["completed_tasks"], "#10B981"),
-            ("📈", "Progression Globale", f"{stats['global_progress']}%", "#EC4899"),
+            {
+                "icon": "🏆",
+                "label": f"Terminés {current_year}",
+                "value": str(yearly["completed"]),
+                "color": "#10B981",
+                "gradient": ("#D1FAE5", "#FFFFFF")
+            },
+            {
+                "icon": "📝",
+                "label": f"Créés {current_year}",
+                "value": str(yearly["created"]),
+                "color": "#3B82F6",
+                "gradient": ("#DBEAFE", "#FFFFFF")
+            },
+            {
+                "icon": "🔄",
+                "label": "En cours ce mois",
+                "value": str(monthly["in_progress"]),
+                "color": "#F59E0B",
+                "gradient": ("#FEF3C7", "#FFFFFF")
+            },
         ]
 
-        for idx, (icon, label, value, color) in enumerate(cards_data):
-            row = idx // 3
-            col = idx % 3
-            self._create_stat_card(icon, label, value, color, row + 1, col)
+        for idx, card_data in enumerate(cards_data):
+            self._create_glass_card(card_data, row=1, col=idx)
 
-    def _create_stat_card(
-        self,
-        icon: str,
-        label: str,
-        value,
-        color: str,
-        row: int,
-        col: int
-    ) -> None:
-        """Crée une carte de statistique individuelle."""
-        card = ctk.CTkFrame(self, corner_radius=15)
-        card.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
-        card.grid_columnconfigure(0, weight=1)
+    def _create_glass_card(self, data: dict, row: int, col: int) -> None:
+        """Crée une carte avec effet glassmorphism."""
+        card = ctk.CTkFrame(
+            self,
+            fg_color="#FFFFFF",
+            corner_radius=20,
+            border_width=1,
+            border_color="#E2E8F0"
+        )
+        card.grid(row=row, column=col, padx=12, pady=12, sticky="nsew")
 
-        # Icône
+        # Ombre simulée par un frame derrière
+        shadow = ctk.CTkFrame(
+            self,
+            fg_color="#000000",
+            corner_radius=20
+        )
+        # On ne peut pas vraiment faire d'ombre avec CTk, on utilise le border
+
+        inner = ctk.CTkFrame(card, fg_color="transparent")
+        inner.pack(fill="both", expand=True, padx=24, pady=24)
+
+        # Icône + valeur sur la même ligne
+        top_row = ctk.CTkFrame(inner, fg_color="transparent")
+        top_row.pack(fill="x")
+
         ctk.CTkLabel(
-            card,
-            text=icon,
+            top_row,
+            text=data["icon"],
             font=ctk.CTkFont(size=32)
-        ).pack(pady=(15, 5))
+        ).pack(side="left")
 
-        # Valeur
         ctk.CTkLabel(
-            card,
-            text=str(value),
-            font=ctk.CTkFont(size=28, weight="bold"),
-            text_color=color
-        ).pack(pady=5)
+            top_row,
+            text=data["value"],
+            font=ctk.CTkFont(size=36, weight="bold"),
+            text_color=data["color"]
+        ).pack(side="right")
 
         # Label
         ctk.CTkLabel(
-            card,
-            text=label,
+            inner,
+            text=data["label"],
             font=ctk.CTkFont(size=13),
-            text_color="gray"
-        ).pack(pady=(0, 15))
+            text_color="#64748B"
+        ).pack(anchor="w", pady=(10, 0))
 
     # ───────────────────────────────────────────────
-    # Graphiques Matplotlib
+    # Graphiques
     # ───────────────────────────────────────────────
 
     def _build_charts(self) -> None:
-        """Construit les graphiques de progression."""
-        charts_frame = ctk.CTkFrame(self)
-        charts_frame.grid(row=2, column=0, columnspan=3, sticky="nsew", padx=10, pady=10)
-        charts_frame.grid_columnconfigure((0, 1), weight=1)
-        charts_frame.grid_rowconfigure(0, weight=1)
+        """Construit les graphiques en style glassmorphism."""
+        charts_container = ctk.CTkFrame(self, fg_color="transparent")
+        charts_container.grid(row=2, column=0, columnspan=3, sticky="nsew", padx=12, pady=12)
+        charts_container.grid_columnconfigure((0, 1), weight=1)
+        charts_container.grid_rowconfigure(0, weight=1)
 
-        # Graphique 1 : Répartition des Goals par statut (Camembert)
-        self._build_pie_chart(charts_frame, row=0, col=0)
+        # Graphique 1 : Donut - Répartition par statut
+        self._build_donut_chart(charts_container, row=0, col=0)
 
-        # Graphique 2 : Progression globale (Jauge)
-        self._build_gauge_chart(charts_frame, row=0, col=1)
+        # Graphique 2 : Courbe - Progression 30 jours
+        self._build_line_chart(charts_container, row=0, col=1)
 
-    def _build_pie_chart(self, parent, row: int, col: int) -> None:
-        """Construit un graphique camembert des goals par statut."""
-        stats = self.service.get_dashboard_stats()
+    def _build_donut_chart(self, parent, row: int, col: int) -> None:
+        """Graphique donut avec répartition par statut."""
+        distribution = self.service.get_status_distribution()
 
-        labels = ["Non commencé", "En cours", "Terminé"]
-        sizes = [
-            stats["goals_not_started"],
-            stats["goals_in_progress"],
-            stats["goals_completed"]
-        ]
-        colors = ["#9CA3AF", "#F59E0B", "#10B981"]
+        labels = []
+        sizes = []
+        colors = []
 
-        # Vérifier qu'il y a des données
-        if sum(sizes) == 0:
-            frame = ctk.CTkFrame(parent)
-            frame.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
-            ctk.CTkLabel(
-                frame,
-                text="Aucune donnée à afficher",
-                text_color="gray"
-            ).pack(expand=True)
+        color_map = {
+            "Terminé": "#10B981",
+            "En cours": "#3B82F6",
+            "Non commencé": "#94A3B8"
+        }
+
+        for status in ["Terminé", "En cours", "Non commencé"]:
+            if status in distribution and distribution[status] > 0:
+                labels.append(status)
+                sizes.append(distribution[status])
+                colors.append(color_map.get(status, "#CBD5E1"))
+
+        if not sizes or sum(sizes) == 0:
+            self._build_empty_chart(parent, "Répartition par statut", row, col)
             return
 
-        # Création de la figure Matplotlib
-        fig = Figure(figsize=(5, 4), dpi=100, facecolor="#2B2B2B" if ctk.get_appearance_mode() == "Dark" else "white")
-        ax = fig.add_subplot(111)
-        ax.set_facecolor("#2B2B2B" if ctk.get_appearance_mode() == "Dark" else "white")
+        # Carte glassmorphism
+        card = self._create_chart_card(parent, "🍩 Répartition par statut")
+        card.grid(row=row, column=col, padx=8, pady=8, sticky="nsew")
 
+        fig = Figure(figsize=(5, 4.5), dpi=100, facecolor="#FFFFFF")
+        ax = fig.add_subplot(111)
+
+        # Donut chart
         wedges, texts, autotexts = ax.pie(
             sizes,
             labels=labels,
             colors=colors,
-            autopct="%1.1f%%",
+            autopct='%1.0f%%',
             startangle=90,
-            textprops={"color": "white" if ctk.get_appearance_mode() == "Dark" else "black"}
+            pctdistance=0.75,
+            textprops={'fontsize': 11, 'fontweight': 'bold', 'color': '#1E293B'}
         )
 
-        ax.set_title("Répartition des Goals", color="white" if ctk.get_appearance_mode() == "Dark" else "black", fontsize=14, weight="bold")
+        # Cercle blanc au centre pour effet donut
+        centre_circle = plt.Circle((0, 0), 0.50, fc='#FFFFFF')
+        ax.add_artist(centre_circle)
 
-        # Intégration dans Tkinter
-        canvas = FigureCanvasTkAgg(fig, master=parent)
+        # Texte au centre
+        total = sum(sizes)
+        ax.text(0, 0.05, str(total), ha='center', va='center', 
+                fontsize=28, fontweight='bold', color='#1E293B')
+        ax.text(0, -0.15, 'goals', ha='center', va='center', 
+                fontsize=12, color='#64748B')
+
+        ax.axis('equal')
+
+        canvas = FigureCanvasTkAgg(fig, master=card)
         canvas.draw()
-        canvas.get_tk_widget().grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=15, pady=15)
 
-    def _build_gauge_chart(self, parent, row: int, col: int) -> None:
-        """Construit une jauge de progression globale."""
-        stats = self.service.get_dashboard_stats()
-        progress = stats["global_progress"]
+    def _build_line_chart(self, parent, row: int, col: int) -> None:
+        """Courbe de progression sur 30 jours."""
+        daily_data = self.service.get_daily_progress_30_days()
 
-        fig = Figure(figsize=(5, 4), dpi=100, facecolor="#2B2B2B" if ctk.get_appearance_mode() == "Dark" else "white")
-        ax = fig.add_subplot(111, projection="polar")
-        ax.set_facecolor("#2B2B2B" if ctk.get_appearance_mode() == "Dark" else "white")
+        dates = [d["date"] for d in daily_data]
+        values = [d["completed_tasks"] for d in daily_data]
 
-        # Jauge semi-circulaire
-        theta = [0, progress / 100 * 3.14159, 3.14159]
-        radii = [1, 1, 1]
-        colors = ["#10B981" if progress >= 50 else "#F59E0B", "#374151", "#374151"]
+        # Calculer la progression cumulative
+        cumulative = []
+        total = 0
+        for v in values:
+            total += v
+            cumulative.append(total)
 
-        ax.barh(1, 3.14159, height=0.3, color="#374151", alpha=0.3)
-        ax.barh(1, progress / 100 * 3.14159, height=0.3, color="#10B981" if progress >= 50 else "#F59E0B")
+        card = self._create_chart_card(parent, "📈 Progression sur 30 jours")
+        card.grid(row=row, column=col, padx=8, pady=8, sticky="nsew")
 
-        ax.set_ylim(0, 1.5)
-        ax.set_xlim(0, 3.14159)
-        ax.set_title(f"Progression Globale\n{progress}%", color="white" if ctk.get_appearance_mode() == "Dark" else "black", fontsize=14, weight="bold", pad=20)
+        fig = Figure(figsize=(5, 4.5), dpi=100, facecolor="#FFFFFF")
+        ax = fig.add_subplot(111)
 
-        # Supprimer les axes
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.spines["polar"].set_visible(False)
+        # Fond de la zone de tracé
+        ax.set_facecolor("#FAFBFC")
 
-        canvas = FigureCanvasTkAgg(fig, master=parent)
+        # Courbe avec dégradé visuel
+        x = np.arange(len(dates))
+        ax.fill_between(x, cumulative, alpha=0.15, color="#3B82F6")
+        ax.plot(x, cumulative, color="#3B82F6", linewidth=2.5, marker='o', 
+                markersize=4, markerfacecolor="#FFFFFF", markeredgecolor="#3B82F6",
+                markeredgewidth=2)
+
+        # Grille subtile
+        ax.grid(True, alpha=0.3, color="#E2E8F0", linestyle='--')
+        ax.set_axisbelow(True)
+
+        # Labels X (tous les 5 jours pour lisibilité)
+        tick_positions = list(range(0, len(dates), 5))
+        tick_labels = [dates[i] for i in tick_positions]
+        ax.set_xticks(tick_positions)
+        ax.set_xticklabels(tick_labels, rotation=0, fontsize=9)
+
+        ax.set_ylabel('Tâches terminées (cumul)', fontsize=10, color='#475569')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        # Titre dans le graphique
+        ax.set_title(f"Total: {cumulative[-1]} tâches terminées", 
+                    fontsize=12, color='#64748B', pad=10)
+
+        fig.tight_layout()
+
+        canvas = FigureCanvasTkAgg(fig, master=card)
         canvas.draw()
-        canvas.get_tk_widget().grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=15, pady=15)
 
-    # ───────────────────────────────────────────────
-    # Activité Récente
-    # ───────────────────────────────────────────────
+    def _create_chart_card(self, parent, title: str) -> ctk.CTkFrame:
+        """Crée une carte glassmorphism pour un graphique."""
+        card = ctk.CTkFrame(
+            parent,
+            fg_color="#FFFFFF",
+            corner_radius=20,
+            border_width=1,
+            border_color="#E2E8F0"
+        )
 
-    def _build_recent_activity(self) -> None:
-        """Affiche un aperçu des goals récents."""
-        activity_frame = ctk.CTkFrame(self)
-        activity_frame.grid(row=3, column=0, columnspan=3, sticky="nsew", padx=10, pady=10)
+        # Titre de la carte
+        header = ctk.CTkFrame(card, fg_color="transparent", height=40)
+        header.pack(fill="x", padx=20, pady=(15, 0))
+        header.pack_propagate(False)
 
         ctk.CTkLabel(
-            activity_frame,
-            text="🎯 Goals Récents",
-            font=ctk.CTkFont(size=16, weight="bold")
-        ).pack(anchor="w", padx=15, pady=(15, 10))
+            header,
+            text=title,
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color="#1E293B"
+        ).pack(side="left")
 
-        # Récupérer les 5 derniers goals
-        recent_goals = self.service.list_goals()[:5]
+        return card
 
-        if not recent_goals:
-            ctk.CTkLabel(
-                activity_frame,
-                text="Aucun goal créé pour le moment",
-                text_color="gray"
-            ).pack(pady=20)
-            return
+    def _build_empty_chart(self, parent, title: str, row: int, col: int) -> None:
+        """Affiche un message quand il n'y a pas de données."""
+        card = self._create_chart_card(parent, title)
+        card.grid(row=row, column=col, padx=8, pady=8, sticky="nsew")
 
-        for goal in recent_goals:
-            row = ctk.CTkFrame(activity_frame, fg_color="transparent")
-            row.pack(fill="x", padx=15, pady=5)
+        ctk.CTkLabel(
+            card,
+            text="Aucune donnée à afficher",
+            font=ctk.CTkFont(size=14),
+            text_color="#94A3B8"
+        ).pack(expand=True, pady=80)
 
-            # Indicateur de statut
-            status_colors = {
-                "Terminé": "#10B981",
-                "En cours": "#F59E0B",
-                "Non commencé": "#9CA3AF"
-            }
-            ctk.CTkLabel(
-                row,
-                text="●",
-                text_color=status_colors.get(goal.status, "gray"),
-                font=ctk.CTkFont(size=16)
-            ).pack(side="left", padx=(0, 10))
 
-            ctk.CTkLabel(
-                row,
-                text=goal.title,
-                font=ctk.CTkFont(size=13, weight="bold")
-            ).pack(side="left")
-
-            progress = self.service.get_goal_progress(goal.id)
-            ctk.CTkLabel(
-                row,
-                text=f"{progress['percentage']:.0f}%",
-                font=ctk.CTkFont(size=12),
-                text_color="gray"
-            ).pack(side="right")

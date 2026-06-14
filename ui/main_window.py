@@ -1,14 +1,16 @@
 """
 ui/main_window.py
-Fenêtre principale avec thème CLAIR et moderne.
+Fenêtre principale avec grille de goals et tri par progression.
 """
 
+import os
 import customtkinter as ctk
 from typing import Optional
 from services import GoalService
 from database import DatabaseManager
 from ui.theme_manager import ThemeManager
 from ui.dashboard_view import DashboardView
+from ui.goals_grid_view import GoalsGridView
 from ui.goal_detail_view import GoalDetailView
 from ui.dialogs import GoalDialog
 
@@ -21,16 +23,17 @@ class MainWindow(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
 
-        # Configuration fenêtre
         self.title("Goals Manager")
         self.geometry("1280x850")
         self.minsize(1000, 700)
-        self.configure(fg_color="#F1F5F9")  # Fond gris très clair
+        self.configure(fg_color="#F1F5F9")
 
         self.db = DatabaseManager()
         self.service = GoalService(self.db)
+
         self.selected_goal_id: Optional[int] = None
         self.current_view: Optional[ctk.CTkFrame] = None
+        self.show_completed: bool = False
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -41,7 +44,7 @@ class MainWindow(ctk.CTk):
         self._show_dashboard()
 
     def _build_left_panel(self) -> None:
-        """Panneau gauche - Sidebar claire et élégante."""
+        """Panneau gauche - Sidebar claire."""
         self.left_frame = ctk.CTkFrame(
             self,
             width=320,
@@ -50,7 +53,7 @@ class MainWindow(ctk.CTk):
             border_width=0
         )
         self.left_frame.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
-        self.left_frame.grid_rowconfigure(6, weight=1)
+        self.left_frame.grid_rowconfigure(7, weight=1)
         self.left_frame.grid_propagate(False)
 
         # Logo / Titre
@@ -58,12 +61,7 @@ class MainWindow(ctk.CTk):
         header.grid(row=0, column=0, sticky="ew", padx=20, pady=(20, 10))
         header.grid_propagate(False)
 
-        ctk.CTkLabel(
-            header,
-            text="🎯",
-            font=ctk.CTkFont(size=28)
-        ).pack(side="left", padx=(0, 10))
-
+        ctk.CTkLabel(header, text="🎯", font=ctk.CTkFont(size=28)).pack(side="left", padx=(0, 10))
         ctk.CTkLabel(
             header,
             text="Goals Manager",
@@ -150,13 +148,27 @@ class MainWindow(ctk.CTk):
         self.priority_filter.set("Toutes")
         self.priority_filter.grid(row=0, column=1, padx=(5, 0), sticky="ew")
 
-        # Liste des goals
+        # Toggle "Voir les terminés"
+        self.toggle_completed_btn = ctk.CTkButton(
+            self.left_frame,
+            text="👁️ Voir les terminés",
+            command=self._toggle_completed_filter,
+            height=35,
+            corner_radius=8,
+            fg_color="#F1F5F9",
+            hover_color="#E2E8F0",
+            text_color="#475569",
+            font=ctk.CTkFont(size=12, weight="bold")
+        )
+        self.toggle_completed_btn.grid(row=6, column=0, padx=15, pady=10, sticky="ew")
+
+        # Liste des goals (sidebar — compacte pour navigation rapide)
         self.goals_scroll = ctk.CTkScrollableFrame(
             self.left_frame,
             fg_color="transparent",
             label_text=""
         )
-        self.goals_scroll.grid(row=6, column=0, sticky="nsew", padx=10, pady=10)
+        self.goals_scroll.grid(row=7, column=0, sticky="nsew", padx=10, pady=10)
 
         # Bouton Nouveau Goal
         self.new_goal_btn = ctk.CTkButton(
@@ -170,7 +182,7 @@ class MainWindow(ctk.CTk):
             hover_color="#2563EB",
             text_color="#FFFFFF"
         )
-        self.new_goal_btn.grid(row=7, column=0, padx=15, pady=(5, 20), sticky="ew")
+        self.new_goal_btn.grid(row=8, column=0, padx=15, pady=(5, 20), sticky="ew")
 
     def _create_nav_button(self, parent, text, command, active=False):
         """Crée un bouton de navigation stylisé."""
@@ -196,7 +208,7 @@ class MainWindow(ctk.CTk):
         return btn
 
     def _build_right_panel(self) -> None:
-        """Panneau droit - Fond clair."""
+        """Panneau droit."""
         self.right_frame = ctk.CTkFrame(
             self,
             fg_color="#F1F5F9",
@@ -213,12 +225,7 @@ class MainWindow(ctk.CTk):
 
     def _show_dashboard(self) -> None:
         self._clear_right_panel()
-        self.dashboard_btn.configure(
-            fg_color="#EFF6FF", text_color="#3B82F6", font=ctk.CTkFont(size=13, weight="bold")
-        )
-        self.goals_btn.configure(
-            fg_color="transparent", text_color="#64748B", font=ctk.CTkFont(size=13, weight="normal")
-        )
+        self._set_nav_active("dashboard")
 
         self.current_view = DashboardView(
             self.right_frame,
@@ -228,29 +235,28 @@ class MainWindow(ctk.CTk):
         self.current_view.grid(row=0, column=0, sticky="nsew")
 
     def _show_goals_view(self) -> None:
+        """Affiche la grille de goals dans le panneau droit."""
         self._clear_right_panel()
-        self.dashboard_btn.configure(
-            fg_color="transparent", text_color="#64748B", font=ctk.CTkFont(size=13, weight="normal")
-        )
-        self.goals_btn.configure(
-            fg_color="#EFF6FF", text_color="#3B82F6", font=ctk.CTkFont(size=13, weight="bold")
-        )
-
-        self.empty_label = ctk.CTkLabel(
-            self.right_frame,
-            text="Sélectionnez un objectif pour voir les détails",
-            font=ctk.CTkFont(size=16),
-            text_color="#94A3B8"
-        )
-        self.empty_label.place(relx=0.5, rely=0.5, anchor="center")
-
+        self._set_nav_active("goals")
         self.selected_goal_id = None
+
+        # Récupérer les goals triés par progression
+        goals = self._get_filtered_goals()
+
+        # Afficher la grille
+        self.current_view = GoalsGridView(
+            self.right_frame,
+            service=self.service,
+            goals=goals,
+            on_select_goal=self._on_goal_selected
+        )
+        self.current_view.grid(row=0, column=0, sticky="nsew")
+
+        # Mettre à jour la sidebar aussi
         self.refresh_goals_list()
 
-    def refresh_goals_list(self) -> None:
-        for widget in self.goals_scroll.winfo_children():
-            widget.destroy()
-
+    def _get_filtered_goals(self) -> list:
+        """Récupère les goals filtrés et triés par progression."""
         status = self.status_filter.get()
         priority = self.priority_filter.get()
         search = self.search_var.get() or None
@@ -260,157 +266,37 @@ class MainWindow(ctk.CTk):
         if priority == "Toutes":
             priority = None
 
-        goals = self.service.list_goals(status=status, priority=priority, search=search)
+        # Filtre principal : terminés ou non
+        if self.show_completed:
+            goals = self.service.list_goals(status="Terminé")
+        else:
+            goals = self.service.list_goals(exclude_status="Terminé")
 
-        if not goals:
-            ctk.CTkLabel(
-                self.goals_scroll,
-                text="Aucun objectif trouvé",
-                text_color="#94A3B8",
-                font=ctk.CTkFont(size=13)
-            ).pack(pady=30)
-            return
+        # Appliquer filtres additionnels
+        if status and status != "Terminé":
+            goals = [g for g in goals if g.status == status]
+        if priority:
+            goals = [g for g in goals if g.priority == priority]
+        if search:
+            goals = [g for g in goals if search.lower() in g.title.lower()
+                     or search.lower() in g.description.lower()]
 
+        # Tri par progression décroissante
+        goals_with_progress = []
         for goal in goals:
-            self._create_goal_card(goal)
+            prog = self.service.get_goal_progress(goal.id)
+            goals_with_progress.append((goal, prog["percentage"]))
 
-    def _create_goal_card(self, goal) -> None:
-        """Carte de goal - Design clair et moderne."""
-        priority_colors = {
-            "Haute": "#FEE2E2",
-            "Moyenne": "#FEF3C7",
-            "Faible": "#D1FAE5"
-        }
-        priority_text_colors = {
-            "Haute": "#DC2626",
-            "Moyenne": "#D97706",
-            "Faible": "#059669"
-        }
+        goals_with_progress.sort(key=lambda x: x[1], reverse=True)
+        return [g for g, _ in goals_with_progress]
 
-        card = ctk.CTkFrame(
-            self.goals_scroll,
-            fg_color="#FFFFFF",
-            corner_radius=12,
-            border_width=1,
-            border_color="#E2E8F0"
-        )
-        card.pack(fill="x", padx=5, pady=4)
-        card.bind("<Button-1>", lambda e, gid=goal.id: self._select_goal(gid))
-        card.configure(cursor="hand2")
-
-        # En-tête carte
-        header = ctk.CTkFrame(card, fg_color="transparent")
-        header.pack(fill="x", padx=15, pady=(12, 8))
-
-        # Badge priorité
-        priority_badge = ctk.CTkLabel(
-            header,
-            text=f"  {goal.priority}  ",
-            font=ctk.CTkFont(size=10, weight="bold"),
-            fg_color=priority_colors.get(goal.priority, "#F1F5F9"),
-            text_color=priority_text_colors.get(goal.priority, "#64748B"),
-            corner_radius=6
-        )
-        priority_badge.pack(side="right")
-
-        # Titre
-        title = ctk.CTkLabel(
-            header,
-            text=goal.title,
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#1E293B",
-            anchor="w"
-        )
-        title.pack(side="left", fill="x", expand=True)
-        title.bind("<Button-1>", lambda e, gid=goal.id: self._select_goal(gid))
-
-        # Description (si présente)
-        if goal.description:
-            desc = ctk.CTkLabel(
-                card,
-                text=goal.description[:60] + "..." if len(goal.description) > 60 else goal.description,
-                font=ctk.CTkFont(size=12),
-                text_color="#64748B",
-                anchor="w"
-            )
-            desc.pack(fill="x", padx=15, pady=(0, 8))
-
-        # Barre de progression
-        progress = self.service.get_goal_progress(goal.id)
-        progress_frame = ctk.CTkFrame(card, fg_color="transparent")
-        progress_frame.pack(fill="x", padx=15, pady=(0, 10))
-
-        # Barre moderne
-        progress_bar_bg = ctk.CTkFrame(progress_frame, height=6, corner_radius=3, fg_color="#E2E8F0")
-        progress_bar_bg.pack(fill="x", expand=True, side="left", padx=(0, 10))
-
-        progress_bar = ctk.CTkProgressBar(
-            progress_bar_bg,
-            height=6,
-            corner_radius=3,
-            fg_color="#E2E8F0",
-            progress_color="#3B82F6",
-            width=200
-        )
-        progress_bar.pack(fill="x", padx=0, pady=0)
-        progress_bar.set(progress["percentage"] / 100)
-
-        # Pourcentage
-        ctk.CTkLabel(
-            progress_frame,
-            text=f"{progress['percentage']:.0f}%",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            text_color="#3B82F6",
-            width=40
-        ).pack(side="right")
-
-        # Footer
-        footer = ctk.CTkFrame(card, fg_color="transparent")
-        footer.pack(fill="x", padx=15, pady=(0, 12))
-
-        # Statut avec dot coloré
-        status_colors = {
-            "Terminé": "#10B981",
-            "En cours": "#F59E0B",
-            "Non commencé": "#94A3B8"
-        }
-        dot_color = status_colors.get(goal.status, "#94A3B8")
-
-        status_frame = ctk.CTkFrame(footer, fg_color="transparent")
-        status_frame.pack(side="left")
-
-        ctk.CTkLabel(
-            status_frame,
-            text="●",
-            font=ctk.CTkFont(size=10),
-            text_color=dot_color
-        ).pack(side="left", padx=(0, 5))
-
-        ctk.CTkLabel(
-            status_frame,
-            text=goal.status,
-            font=ctk.CTkFont(size=11),
-            text_color="#64748B"
-        ).pack(side="left")
-
-        # Nombre de tâches
-        ctk.CTkLabel(
-            footer,
-            text=f"{progress['total_tasks']} tâches",
-            font=ctk.CTkFont(size=11),
-            text_color="#94A3B8"
-        ).pack(side="right")
-
-        # Highlight si sélectionné
-        if goal.id == self.selected_goal_id:
-            card.configure(border_color="#3B82F6", border_width=2)
-
-    def _select_goal(self, goal_id: int) -> None:
+    def _on_goal_selected(self, goal_id: int) -> None:
+        """Callback quand un goal est sélectionné dans la grille."""
         self.selected_goal_id = goal_id
-        self.refresh_goals_list()
         self._show_goal_details(goal_id)
 
     def _show_goal_details(self, goal_id: int) -> None:
+        """Affiche les détails d'un goal dans le panneau droit."""
         goal = self.service.get_goal(goal_id)
         if not goal:
             return
@@ -424,6 +310,152 @@ class MainWindow(ctk.CTk):
             on_update=self.refresh_goals_list
         )
         self.current_view.grid(row=0, column=0, sticky="nsew")
+
+    def _toggle_completed_filter(self) -> None:
+        """Bascule entre goals non terminés et terminés."""
+        self.show_completed = not self.show_completed
+
+        if self.show_completed:
+            self.toggle_completed_btn.configure(
+                text="👁️ Voir les non terminés",
+                fg_color="#D1FAE5",
+                hover_color="#A7F3D0",
+                text_color="#059669"
+            )
+        else:
+            self.toggle_completed_btn.configure(
+                text="👁️ Voir les terminés",
+                fg_color="#F1F5F9",
+                hover_color="#E2E8F0",
+                text_color="#475569"
+            )
+
+        self._show_goals_view()
+
+    def refresh_goals_list(self) -> None:
+        """Recharge la sidebar (liste compacte) et la grille si active."""
+        # Sidebar
+        for widget in self.goals_scroll.winfo_children():
+            widget.destroy()
+
+        status = self.status_filter.get()
+        priority = self.priority_filter.get()
+        search = self.search_var.get() or None
+
+        if status == "Tous":
+            status = None
+        if priority == "Toutes":
+            priority = None
+
+        if self.show_completed:
+            goals = self.service.list_goals(status="Terminé")
+        else:
+            goals = self.service.list_goals(exclude_status="Terminé")
+
+        if status and status != "Terminé":
+            goals = [g for g in goals if g.status == status]
+        if priority:
+            goals = [g for g in goals if g.priority == priority]
+        if search:
+            goals = [g for g in goals if search.lower() in g.title.lower()
+                     or search.lower() in g.description.lower()]
+
+        if not goals:
+            ctk.CTkLabel(
+                self.goals_scroll,
+                text="Aucun objectif",
+                text_color="#94A3B8",
+                font=ctk.CTkFont(size=13)
+            ).pack(pady=30)
+            return
+
+        for goal in goals:
+            self._create_sidebar_goal_item(goal)
+
+        # Si on est sur la vue goals, refresh aussi la grille
+        if isinstance(self.current_view, GoalsGridView):
+            # Mettre à jour la grille sans recréer la vue
+            goals = self._get_filtered_goals()
+            self.current_view.goals = goals
+            self.current_view._build_grid()
+
+    def _create_sidebar_goal_item(self, goal) -> None:
+        """Item compact dans la sidebar."""
+        progress = self.service.get_goal_progress(goal.id)
+        percentage = progress["percentage"]
+        goal_color = goal.color if hasattr(goal, 'color') and goal.color else "#3B82F6"
+
+        item = ctk.CTkFrame(
+            self.goals_scroll,
+            fg_color="#FFFFFF",
+            corner_radius=10,
+            border_width=1,
+            border_color="#E2E8F0",
+            height=60
+        )
+        item.pack(fill="x", padx=2, pady=2)
+        item.pack_propagate(False)
+        item.bind("<Button-1>", lambda e, gid=goal.id: self._on_goal_selected(gid))
+        item.configure(cursor="hand2")
+
+        # Hover
+        item.bind("<Enter>", lambda e, it=item, gc=goal_color: it.configure(border_color=gc, border_width=2))
+        item.bind("<Leave>", lambda e, it=item: it.configure(border_color="#E2E8F0", border_width=1))
+
+        inner = ctk.CTkFrame(item, fg_color="transparent")
+        inner.pack(fill="both", expand=True, padx=10, pady=8)
+        inner.bind("<Button-1>", lambda e, gid=goal.id: self._on_goal_selected(gid))
+
+        # Titre + %
+        top = ctk.CTkFrame(inner, fg_color="transparent")
+        top.pack(fill="x")
+        top.bind("<Button-1>", lambda e, gid=goal.id: self._on_goal_selected(gid))
+
+        ctk.CTkLabel(
+            top,
+            text=goal.title,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#1E293B",
+            anchor="w"
+        ).pack(side="left", fill="x", expand=True)
+
+        percent_color = "#10B981" if percentage >= 100 else goal_color
+        ctk.CTkLabel(
+            top,
+            text=f"{percentage:.0f}%",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=percent_color
+        ).pack(side="right")
+
+        # Mini barre
+        bar_bg = ctk.CTkFrame(inner, height=3, corner_radius=2, fg_color="#E2E8F0")
+        bar_bg.pack(fill="x", pady=(4, 0))
+        bar_bg.pack_propagate(False)
+
+        fill_width = max(1, int(200 * (percentage / 100))) if percentage > 0 else 1
+        bar_fill = ctk.CTkFrame(bar_bg, height=3, corner_radius=2, fg_color=percent_color, width=fill_width)
+        bar_fill.pack(side="left", fill="y")
+
+    def _set_nav_active(self, view: str) -> None:
+        """Met à jour l'état des boutons de navigation."""
+        if view == "dashboard":
+            self.dashboard_btn.configure(
+                fg_color="#EFF6FF", text_color="#3B82F6",
+                font=ctk.CTkFont(size=13, weight="bold")
+            )
+            self.goals_btn.configure(
+                fg_color="transparent", text_color="#64748B",
+                font=ctk.CTkFont(size=13, weight="normal")
+            )
+        else:
+            self.dashboard_btn.configure(
+                fg_color="transparent", text_color="#64748B",
+                font=ctk.CTkFont(size=13, weight="normal")
+            )
+            self.goals_btn.configure(
+                fg_color="#EFF6FF", text_color="#3B82F6",
+                font=ctk.CTkFont(size=13, weight="bold")
+            )
 
     def _open_new_goal_dialog(self) -> None:
         dialog = GoalDialog(self, service=self.service, on_save=self.refresh_goals_list)
