@@ -8,6 +8,7 @@ import sys
 import sqlite3
 import tkinter as tk
 from tkinter import colorchooser
+from turtle import right
 from typing import Optional, Dict, List, Tuple
 from dataclasses import dataclass, field
 
@@ -22,6 +23,7 @@ if _project_root not in sys.path:
 from database import DatabaseManager
 from services import GoalService
 from ui.collage_engine import CollageEngine, CollageConfig, LayoutType, CollageItem
+from ui.vision_board_fullscreen import VisionBoardFullscreen
 
 
 # ═══════════════════════════════════════════════════
@@ -278,6 +280,17 @@ class VisionBoardView(ctk.CTkFrame):
         right = ctk.CTkFrame(header, fg_color="transparent")
         right.pack(side="right", pady=8)
 
+        # Bouton Full screen
+        ctk.CTkButton(
+            right,
+            text="🖼️ Plein écran",
+            width=130, height=32, corner_radius=8,
+            fg_color="#8B5CF6",
+            hover_color="#7C3AED",
+            text_color="#FFFFFF",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._enter_fullscreen
+        ).pack(side="left", padx=4)
 
         # Bouton Ajouter image
         ctk.CTkButton(
@@ -1264,3 +1277,38 @@ class VisionBoardView(ctk.CTkFrame):
         )
         saved.place(relx=0.5, rely=0.95, anchor="center")
         self.after(1500, saved.destroy)
+
+    def _enter_fullscreen(self):
+        """Passe en mode plein écran."""
+        self._save()
+        
+        # Vérifier qu'il y a quelque chose à afficher
+        if not self.items and not self.texts:
+            # Message d'erreur discret
+            error = ctk.CTkLabel(
+                self,
+                text="⚠️ Le Vision Board est vide",
+                font=ctk.CTkFont(size=12),
+                text_color="#EF4444",
+                fg_color="#FEE2E2",
+                corner_radius=8,
+                width=250, height=32
+            )
+            error.place(relx=0.5, rely=0.95, anchor="center")
+            self.after(2000, error.destroy)
+            return
+        
+        self._fullscreen = VisionBoardFullscreen(
+            master=self.winfo_toplevel(),
+            items=self.items,
+            texts=self.texts,
+            canvas_width=self.CANVAS_W,
+            canvas_height=self.CANVAS_H,
+            on_close=self._on_fullscreen_exit
+        )
+        self._fullscreen.enter()
+
+    def _on_fullscreen_exit(self):
+        """Callback quand on quitte le plein écran."""
+        # Optionnel : rafraîchir la vue normale
+        pass
