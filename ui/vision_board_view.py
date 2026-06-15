@@ -8,12 +8,14 @@ import sys
 import sqlite3
 import tkinter as tk
 from tkinter import colorchooser
-from turtle import right
 from typing import Optional, Dict, List, Tuple
 from dataclasses import dataclass, field
 
 import customtkinter as ctk
 from PIL import Image, ImageDraw, ImageFilter, ImageTk, ImageFont
+
+# Chemin vers police arabe (à télécharger si besoin)
+ARABIC_FONT_PATH = os.path.join("assets", "fonts", "ScheherazadeNew-Medium.ttf")
 
 # Ajouter la racine du projet au path pour les imports absolus
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -24,6 +26,8 @@ from database import DatabaseManager
 from services import GoalService
 from ui.collage_engine import CollageEngine, CollageConfig, LayoutType, CollageItem
 from ui.vision_board_fullscreen import VisionBoardFullscreen
+from ui.quran_service import QuranService, QuranAyat
+from ui.quran_dialog import QuranAyatDialog
 
 
 # ═══════════════════════════════════════════════════
@@ -67,7 +71,7 @@ class VisionItem:
     canvas_id: Optional[int] = None
     shadow_id: Optional[int] = None
     tk_image: Optional[ImageTk.PhotoImage] = None
-    is_mood_item: bool = False  # Nouveau : item généré par mood board
+    is_mood_item: bool = False
 
 
 # ═══════════════════════════════════════════════════
@@ -259,12 +263,97 @@ class VisionBoardView(ctk.CTkFrame):
         self.items: Dict[int, VisionItem] = {}
         self.texts: Dict[int, FloatingText] = {}
         self._next_text_id = 1
-        self._next_mood_id = -1  # IDs négatifs pour les items mood
+        self._next_mood_id = -1
+        self.quran_service = QuranService()
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
         self._build_header()
         self._build_canvas()
         self._load_all()
+
+    # ═══════════════════════════════════════════════════
+    # QURAN METHODS (définies AVANT _build_header)
+    # ═══════════════════════════════════════════════════
+
+    def _show_quran_dialog(self):
+        """Dialogue pour ajouter un ayat au board."""
+        dialog = QuranAyatDialog(self, self.quran_service, on_ayat_selected=self._add_ayat_text)
+        self.wait_window(dialog)
+    
+    def _add_ayat_text(self, ayat: QuranAyat):
+        """Ajoute l'ayat comme texte flottant sur le board - Arabe uniquement."""
+        
+        x = self.canvas.canvasx(self.canvas.winfo_width() / 2) - 250
+        y = self.canvas.canvasy(self.canvas.winfo_height() / 2) - 100
+        
+        # Détecter si la police arabe existe
+        font_path = ARABIC_FONT_PATH if os.path.exists(ARABIC_FONT_PATH) else "Segoe UI"
+        
+        # Style arabe optimisé
+        text_style = TextStyle(
+            font_family=font_path,
+            font_size=32,  # PLUS GRAND pour l'arabe
+            bold=False,
+            color="#059669",
+            background="#F0FDF4",
+            opacity=230
+        )
+        
+        text_obj = FloatingText(
+            id=self._next_text_id,
+            text=ayat.arabic_text,
+            x=x, y=y,
+            style=text_style
+        )
+        self._next_text_id += 1
+        self.texts[text_obj.id] = text_obj
+        self._draw_text(text_obj)
+        self._save()
+        
+        saved = ctk.CTkLabel(
+            self, text="✓ Ayat ajouté",
+            font=ctk.CTkFont(size=11), text_color="#10B981",
+            fg_color="#FFFFFF", corner_radius=6,
+            width=120, height=26
+        )
+        saved.place(relx=0.5, rely=0.95, anchor="center")
+        self.after(1500, saved.destroy)
+
+    def _enter_fullscreen(self):
+        """Passe en mode plein écran."""
+        self._save()
+        
+        if not self.items and not self.texts:
+            error = ctk.CTkLabel(
+                self,
+                text="⚠️ Le Vision Board est vide",
+                font=ctk.CTkFont(size=12),
+                text_color="#EF4444",
+                fg_color="#FEE2E2",
+                corner_radius=8,
+                width=250, height=32
+            )
+            error.place(relx=0.5, rely=0.95, anchor="center")
+            self.after(2000, error.destroy)
+            return
+        
+        self._fullscreen = VisionBoardFullscreen(
+            master=self.winfo_toplevel(),
+            items=self.items,
+            texts=self.texts,
+            canvas_width=self.CANVAS_W,
+            canvas_height=self.CANVAS_H,
+            on_close=self._on_fullscreen_exit
+        )
+        self._fullscreen.enter()
+
+    def _on_fullscreen_exit(self):
+        """Callback quand on quitte le plein écran."""
+        pass
+
+    # ═══════════════════════════════════════════════════
+    # HEADER
+    # ═══════════════════════════════════════════════════
 
     def _build_header(self):
         header = ctk.CTkFrame(self, fg_color="transparent", height=55)
@@ -279,6 +368,18 @@ class VisionBoardView(ctk.CTkFrame):
 
         right = ctk.CTkFrame(header, fg_color="transparent")
         right.pack(side="right", pady=8)
+
+        # Bouton Ayat
+        ctk.CTkButton(
+            right,
+            text="🕌 Ayat",
+            width=90, height=32, corner_radius=8,
+            fg_color="#059669",
+            hover_color="#047857",
+            text_color="#FFFFFF",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._show_quran_dialog
+        ).pack(side="left", padx=4)
 
         # Bouton Full screen
         ctk.CTkButton(
@@ -397,7 +498,6 @@ class VisionBoardView(ctk.CTkFrame):
         skipped = 0
 
         for mi in mood_items:
-            # Convertir en path absolu si relatif
             image_path = mi["image_path"]
             if not os.path.isabs(image_path):
                 image_path = os.path.abspath(image_path)
@@ -536,9 +636,8 @@ class VisionBoardView(ctk.CTkFrame):
             state="hidden", tags=f"border_{item.goal_id}"
         )
 
-        # Handles de redimensionnement pour tous les items
+        # Handles de redimensionnement
         self._draw_resize_handles(item)
-
         self.canvas.tag_raise(item.canvas_id)
 
     def _draw_resize_handles(self, item: VisionItem):
@@ -546,7 +645,7 @@ class VisionBoardView(ctk.CTkFrame):
         w, h = item.width, item.height
         handle_size = 8
         handles = [
-            (item.x + w, item.y + h, "se"),  # Sud-Est (coin bas-droite)
+            (item.x + w, item.y + h, "se"),
         ]
 
         item.resize_handles = []
@@ -595,18 +694,74 @@ class VisionBoardView(ctk.CTkFrame):
             )
 
     def _render_text_image(self, text_obj: FloatingText) -> ImageTk.PhotoImage:
+        """Rend un texte en image avec support arabe complet (RTL + ligatures)."""
         style = text_obj.style
-        try:
-            font = ImageFont.truetype(f"{style.font_family}.ttf", style.font_size)
-        except:
-            try:
-                font = ImageFont.truetype("arial.ttf", style.font_size)
-            except:
+        text = text_obj.text
+        
+        # Détecter si c'est de l'arabe
+        is_arabic = any('\u0600' <= c <= '\u06FF' or '\u0750' <= c <= '\u077F' for c in text)
+        
+        # ─── PRÉPARATION DU TEXTE ARABE ───
+        if is_arabic:
+            import arabic_reshaper
+            from bidi.algorithm import get_display
+            
+            # 1. Reshape : combine les lettres en ligatures
+            reshaped_text = arabic_reshaper.reshape(text)
+            # 2. Bidi : gère la direction droite-gauche
+            display_text = get_display(reshaped_text)
+        else:
+            display_text = text
+        
+        # ─── CHOIX DE LA POLICE ───
+        font = None
+        font_size = style.font_size
+        
+        if is_arabic:
+            # Essayer la police arabe personnalisée d'abord
+            if os.path.exists(ARABIC_FONT_PATH):
+                try:
+                    font = ImageFont.truetype(ARABIC_FONT_PATH, font_size)
+                except Exception as e:
+                    print(f"⚠️ Police arabe perso échouée: {e}")
+            
+            # Fallback polices système arabes
+            if font is None:
+                arabic_fonts = [
+                    ("ScheherazadeNew-Regular.ttf", 28),  # Plus grand pour cette police
+                    ("Scheherazade-Regular.ttf", 28),
+                    ("arial.ttf", 22),
+                    ("segoeui.ttf", 22),
+                    ("tahoma.ttf", 20),
+                ]
+                for font_name, size in arabic_fonts:
+                    try:
+                        font = ImageFont.truetype(font_name, size)
+                        font_size = size
+                        break
+                    except:
+                        continue
+            
+            if font is None:
                 font = ImageFont.load_default()
+                print("⚠️ Aucune police arabe trouvée, fallback default")
+        else:
+            # Texte latin normal
+            try:
+                if os.path.exists(style.font_family):
+                    font = ImageFont.truetype(style.font_family, font_size)
+                else:
+                    font = ImageFont.truetype(f"{style.font_family}.ttf", font_size)
+            except:
+                try:
+                    font = ImageFont.truetype("arial.ttf", font_size)
+                except:
+                    font = ImageFont.load_default()
 
+        # ─── MESURE DU TEXTE ───
         dummy = Image.new("RGBA", (1, 1))
         draw = ImageDraw.Draw(dummy)
-        lines = text_obj.text.split("\n")
+        lines = display_text.split("\n")
         max_w = 0
         total_h = 0
         line_heights = []
@@ -617,23 +772,32 @@ class VisionBoardView(ctk.CTkFrame):
             lh = bbox[3] - bbox[1]
             max_w = max(max_w, lw)
             line_heights.append(lh)
-            total_h += lh + 4
+            total_h += lh + 10
 
-        total_h += 8
-        max_w += 20
+        total_h += 20
+        max_w += 50  # Plus de marge pour l'arabe
 
+        # ─── CRÉATION DE L'IMAGE ───
         img = Image.new("RGBA", (max_w, total_h), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
 
+        # Background
         if style.background and style.opacity > 0:
             r, g, b = self._hex_to_rgb(style.background)
-            draw.rounded_rectangle((0, 0, max_w, total_h), radius=6, fill=(r, g, b, style.opacity))
+            draw.rounded_rectangle((0, 0, max_w, total_h), radius=12, fill=(r, g, b, style.opacity))
 
-        y = 6
+        # ─── DESSIN DU TEXTE ───
+        y = 12
         for i, line in enumerate(lines):
             lh = line_heights[i]
-            draw.text((10, y), line, fill=style.color, font=font)
-            y += lh + 4
+            bbox = draw.textbbox((0, 0), line, font=font)
+            lw = bbox[2] - bbox[0]
+            
+            # Centrer horizontalement
+            x = (max_w - lw) // 2
+            
+            draw.text((x, y), line, fill=style.color, font=font)
+            y += lh + 10
 
         return ImageTk.PhotoImage(img)
 
@@ -663,16 +827,13 @@ class VisionBoardView(ctk.CTkFrame):
         try:
             img = Image.open(item.image_path).convert("RGB")
         except Exception:
-            # Fallback: placeholder coloré
             img = Image.new("RGB", (w, h), self._hex_to_rgb(item.color))
 
         img = self._crop_center(img, w, h)
         img = img.resize((w, h), Image.Resampling.LANCZOS)
 
-        # Rotation si mood item
         if item.rotation != 0 and item.is_mood_item:
             img = img.rotate(item.rotation, expand=True, resample=Image.Resampling.BICUBIC)
-            # Recadrer au centre pour garder la taille cible
             new_w, new_h = img.size
             if new_w > w or new_h > h:
                 left = (new_w - w) // 2
@@ -734,7 +895,6 @@ class VisionBoardView(ctk.CTkFrame):
     def _open_mood_board_dialog(self):
         """Ouvre le dialogue de génération de mood board."""
         goals = self.service.list_goals()
-
         dialog = MoodBoardDialog(self, service=self.service, goals=goals)
         self.wait_window(dialog)
 
@@ -746,11 +906,9 @@ class VisionBoardView(ctk.CTkFrame):
         from ui.add_mood_image_dialog import AddMoodImageDialog
 
         def on_image_selected(path: str, title: str):
-            """Callback quand une image est sélectionnée."""
             mood_id = self._next_mood_id
             self._next_mood_id -= 1
 
-            # Position au centre du canvas visible
             x = self.canvas.canvasx(self.canvas.winfo_width() / 2) - 140
             y = self.canvas.canvasy(self.canvas.winfo_height() / 2) - 95
 
@@ -771,7 +929,6 @@ class VisionBoardView(ctk.CTkFrame):
             self._draw_item(vision_item)
             self._save()
 
-            # Notification
             saved = ctk.CTkLabel(
                 self, text=f"✓ Image ajoutée",
                 font=ctk.CTkFont(size=11), text_color="#10B981",
@@ -786,7 +943,6 @@ class VisionBoardView(ctk.CTkFrame):
 
     def _apply_mood_board(self, items: List[CollageItem]):
         """Applique les items générés au vision board."""
-        # Supprimer les anciens mood items
         mood_ids = [k for k, v in self.items.items() if v.is_mood_item]
         for mid in mood_ids:
             item = self.items[mid]
@@ -796,7 +952,6 @@ class VisionBoardView(ctk.CTkFrame):
                 self.canvas.delete(item.shadow_id)
             del self.items[mid]
 
-        # Ajouter les nouveaux
         for collage_item in items:
             mood_id = self._next_mood_id
             self._next_mood_id -= 1
@@ -817,10 +972,8 @@ class VisionBoardView(ctk.CTkFrame):
             self.items[mood_id] = vision_item
             self._draw_item(vision_item)
 
-        # Sauvegarder
         self._save()
 
-        # Notification
         saved = ctk.CTkLabel(
             self, text=f"✓ {len(items)} images générées",
             font=ctk.CTkFont(size=11), text_color="#10B981",
@@ -855,7 +1008,6 @@ class VisionBoardView(ctk.CTkFrame):
         if not clicked:
             return
 
-        # Vérifier si on a cliqué sur un handle de redimensionnement
         for item in self.items.values():
             if item.is_mood_item and hasattr(item, 'resize_handles'):
                 if clicked[0] in item.resize_handles:
@@ -882,7 +1034,6 @@ class VisionBoardView(ctk.CTkFrame):
                 self._drag_offy = cy - item.y
                 self.canvas.itemconfig(f"border_{item.goal_id}", state="normal")
                 self.canvas.tag_raise(item.canvas_id)
-                # Afficher les handles pour les mood items
                 if item.is_mood_item:
                     self._show_resize_handles(item)
                 return
@@ -891,7 +1042,6 @@ class VisionBoardView(ctk.CTkFrame):
         cx = self.canvas.canvasx(event.x)
         cy = self.canvas.canvasy(event.y)
 
-        # Redimensionnement
         if hasattr(self, '_resizing_item') and self._resizing_item:
             item = self._resizing_item
             dx = cx - self._resize_start_x
@@ -902,8 +1052,6 @@ class VisionBoardView(ctk.CTkFrame):
 
             item.width = new_w
             item.height = new_h
-
-            # Redessiner l'item
             self._redraw_item(item)
             return
 
@@ -934,7 +1082,6 @@ class VisionBoardView(ctk.CTkFrame):
                     self.canvas.move(tag, dx, dy)
             self.canvas.move(f"border_{item.goal_id}", dx, dy)
 
-            # Déplacer aussi les handles
             if hasattr(item, 'resize_handles'):
                 for handle_id in item.resize_handles:
                     self.canvas.move(handle_id, dx, dy)
@@ -953,7 +1100,6 @@ class VisionBoardView(ctk.CTkFrame):
             self._dragged_text = None
         if hasattr(self, '_dragged_item') and self._dragged_item:
             self.canvas.itemconfig(f"border_{self._dragged_item.goal_id}", state="hidden")
-            # Cacher les handles
             self._hide_resize_handles(self._dragged_item)
             self._dragged_item = None
 
@@ -972,16 +1118,13 @@ class VisionBoardView(ctk.CTkFrame):
         for item in self.items.values():
             if item.canvas_id == clicked[0]:
                 if item.is_mood_item:
-                    # Pour les mood items, on peut éditer le titre
                     self._edit_mood_item(item)
                 else:
                     self._edit_image_text(item)
                 return
 
-
     def _redraw_item(self, item: VisionItem):
         """Redessine un item après redimensionnement."""
-        # Supprimer l'ancien rendu
         if item.canvas_id:
             self.canvas.delete(item.canvas_id)
         if item.shadow_id:
@@ -990,13 +1133,8 @@ class VisionBoardView(ctk.CTkFrame):
             for handle_id in item.resize_handles:
                 self.canvas.delete(handle_id)
 
-        # Supprimer la bordure
         self.canvas.delete(f"border_{item.goal_id}")
-
-        # Redessiner
         self._draw_item(item)
-
-        # Afficher les handles
         self._show_resize_handles(item)
 
     def _on_right_click(self, event):
@@ -1028,7 +1166,6 @@ class VisionBoardView(ctk.CTkFrame):
                     menu.add_separator()
                     menu.add_command(label="🗑️ Supprimer", command=lambda: self._delete_item(item))
                 else:
-                    # Goal items : redimensionnable mais pas supprimable depuis ici
                     menu.add_command(label="✏️ Texte motivant", command=lambda: self._edit_image_text(item))
                     menu.add_command(label="↔️ Redimensionner", command=lambda: self._start_resize_mode(item))
                     menu.add_command(label="👁️ Voir le détail", command=lambda: self._show_goal_detail(item.goal_id))
@@ -1039,7 +1176,6 @@ class VisionBoardView(ctk.CTkFrame):
     def _start_resize_mode(self, item: VisionItem):
         """Active le mode redimensionnement pour un mood item."""
         self._show_resize_handles(item)
-        # Message temporaire
         hint = ctk.CTkLabel(
             self, 
             text="🖱️ Drag le coin bleu pour redimensionner",
@@ -1101,7 +1237,6 @@ class VisionBoardView(ctk.CTkFrame):
 
     def _delete_item(self, item: VisionItem):
         """Supprime un item. Seuls les mood items peuvent être supprimés."""
-        # 🛡️ PROTECTION : empêcher la suppression des goals
         if not item.is_mood_item:
             error = ctk.CTkLabel(
                 self,
@@ -1117,7 +1252,6 @@ class VisionBoardView(ctk.CTkFrame):
             self.after(2000, error.destroy)
             return
 
-        # 🗑️ SUPPRESSION PHYSIQUE DU FICHIER
         file_deleted = False
         if item.image_path and os.path.exists(item.image_path):
             try:
@@ -1126,7 +1260,6 @@ class VisionBoardView(ctk.CTkFrame):
             except Exception as e:
                 print(f"⚠️ Impossible de supprimer le fichier: {e}")
 
-        # Supprimer les éléments canvas
         if item.canvas_id:
             self.canvas.delete(item.canvas_id)
         if item.shadow_id:
@@ -1135,7 +1268,6 @@ class VisionBoardView(ctk.CTkFrame):
             for handle_id in item.resize_handles:
                 self.canvas.delete(handle_id)
 
-        # Supprimer de la DB
         try:
             with self.db._get_connection() as conn:
                 cursor = conn.cursor()
@@ -1144,11 +1276,9 @@ class VisionBoardView(ctk.CTkFrame):
         except Exception as e:
             print(f"Erreur suppression DB: {e}")
 
-        # Supprimer de la mémoire
         if item.goal_id in self.items:
             del self.items[item.goal_id]
 
-        # Notification
         msg = "✓ Image supprimée" if file_deleted else "✓ Image retirée (fichier conservé)"
         saved = ctk.CTkLabel(
             self, text=msg,
@@ -1193,7 +1323,6 @@ class VisionBoardView(ctk.CTkFrame):
         with self.db._get_connection() as conn:
             cursor = conn.cursor()
 
-            # Goals
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS vision_board (
                     goal_id INTEGER PRIMARY KEY,
@@ -1217,7 +1346,6 @@ class VisionBoardView(ctk.CTkFrame):
                             height = excluded.height
                     """, (item.goal_id, item.x, item.y, item.width, item.height))
 
-            # Mood items
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS vision_board_mood (
                     id INTEGER PRIMARY KEY,
@@ -1241,7 +1369,6 @@ class VisionBoardView(ctk.CTkFrame):
                     """, (item.goal_id, item.image_path, item.title, item.x, item.y,
                           item.width, item.height, item.color, item.rotation))
 
-            # Textes
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS vision_board_texts (
                     id INTEGER PRIMARY KEY,
@@ -1277,38 +1404,3 @@ class VisionBoardView(ctk.CTkFrame):
         )
         saved.place(relx=0.5, rely=0.95, anchor="center")
         self.after(1500, saved.destroy)
-
-    def _enter_fullscreen(self):
-        """Passe en mode plein écran."""
-        self._save()
-        
-        # Vérifier qu'il y a quelque chose à afficher
-        if not self.items and not self.texts:
-            # Message d'erreur discret
-            error = ctk.CTkLabel(
-                self,
-                text="⚠️ Le Vision Board est vide",
-                font=ctk.CTkFont(size=12),
-                text_color="#EF4444",
-                fg_color="#FEE2E2",
-                corner_radius=8,
-                width=250, height=32
-            )
-            error.place(relx=0.5, rely=0.95, anchor="center")
-            self.after(2000, error.destroy)
-            return
-        
-        self._fullscreen = VisionBoardFullscreen(
-            master=self.winfo_toplevel(),
-            items=self.items,
-            texts=self.texts,
-            canvas_width=self.CANVAS_W,
-            canvas_height=self.CANVAS_H,
-            on_close=self._on_fullscreen_exit
-        )
-        self._fullscreen.enter()
-
-    def _on_fullscreen_exit(self):
-        """Callback quand on quitte le plein écran."""
-        # Optionnel : rafraîchir la vue normale
-        pass
