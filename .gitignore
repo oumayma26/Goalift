@@ -54,6 +54,10 @@ tmp/
 temp/
 *.tmp
 .env
-assets/*
+assets/mood_images/*
+assets/quran_cache/*
+assets/unsplash_cache/*
+assets/goals/*
+
 venv/*
 .venv/*
