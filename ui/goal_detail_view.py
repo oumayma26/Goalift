@@ -7,8 +7,8 @@ sa barre de progression et la liste de ses tâches.
 import customtkinter as ctk
 from tkinter import messagebox
 from typing import Callable
-from models import Goal
-from services import GoalService
+from models.goal import Goal
+from services.goal_service import GoalService
 from ui.dialogs import GoalDialog, TaskDialog
 
 

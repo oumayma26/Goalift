@@ -9,7 +9,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib import rcParams
 import numpy as np
-from services import GoalService
+from services.goal_service import GoalService
 # Import matplotlib
 import matplotlib.pyplot as plt
 

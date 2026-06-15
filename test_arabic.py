@@ -1,24 +1,66 @@
-import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
-import arabic_reshaper
-from bidi.algorithm import get_display
+"""
+test_no_bidi.py
+Test sans BIDI, juste alignement droite.
+"""
 
-text = "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ"
+import os
+from PIL import Image, ImageDraw, ImageFont
 
-# Reshape + Bidi
-reshaped = arabic_reshaper.reshape(text)
-display = get_display(reshaped)
+TEST_TEXT = "إِنَّ مَعَ الْعُسْرِ يُسْرًا"
 
-# Charger la police arabe
-prop = fm.FontProperties(fname='assets/fonts/ScheherazadeNew-Medium.ttf', size=32)
+font = ImageFont.truetype("assets/fonts/ScheherazadeNew-Medium.ttf", 32)
 
-fig, ax = plt.subplots(figsize=(10, 2), facecolor='#F0FDF4')
-ax.text(0.5, 0.5, display, fontproperties=prop, 
-        ha='center', va='center', color='#059669')
-ax.set_xlim(0, 1)
-ax.set_ylim(0, 1)
-ax.axis('off')
+# Test 1 : Texte brut, aligné à droite, une ligne
+img1 = Image.new("RGBA", (600, 80), (255, 255, 255, 255))
+draw1 = ImageDraw.Draw(img1)
+bbox = draw1.textbbox((0, 0), TEST_TEXT, font=font)
+w = bbox[2] - bbox[0]
+draw1.text((580 - w, 20), TEST_TEXT, fill="#059669", font=font)
+img1.save("test_no_bidi_1.png")
+print("1. Brut, aligné droite - sauvegardé")
 
-plt.savefig('test_arabic_mpl.png', dpi=150, bbox_inches='tight', 
-            facecolor='#F0FDF4', pad_inches=0.2)
-print("Image sauvegardée: test_arabic_mpl.png")
+# Test 2 : Wrap manuel, lignes inversées
+words = TEST_TEXT.split()
+# Inverser l'ordre des mots pour le wrap
+words_inv = list(reversed(words))
+print(f"Mots inversés: {words_inv}")
+
+# Wrap LTR sur mots inversés
+lines = []
+current = []
+max_w = 300
+dummy = Image.new("RGBA", (1, 1))
+draw = ImageDraw.Draw(dummy)
+
+for word in words_inv:
+    test = " ".join(current + [word])
+    w = draw.textbbox((0, 0), test, font=font)[2]
+    if w <= max_w:
+        current.append(word)
+    else:
+        if current:
+            lines.append(" ".join(current))
+        current = [word]
+if current:
+    lines.append(" ".join(current))
+
+# Re-inverser chaque ligne et l'ordre des lignes
+result = []
+for line in reversed(lines):
+    words_line = line.split()
+    result.append(" ".join(reversed(words_line)))
+
+print(f"Lignes résultat: {result}")
+
+# Dessiner
+img2 = Image.new("RGBA", (400, 150), (255, 255, 255, 255))
+draw2 = ImageDraw.Draw(img2)
+y = 20
+for line in result:
+    bbox = draw2.textbbox((0, 0), line, font=font)
+    w = bbox[2] - bbox[0]
+    draw2.text((380 - w, y), line, fill="#059669", font=font)
+    y += 50
+
+img2.save("test_no_bidi_2.png")
+print("2. Wrap inversé - sauvegardé")

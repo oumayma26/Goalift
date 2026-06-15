@@ -6,7 +6,7 @@ Fenêtre principale avec Vision Board intégré.
 import os
 import customtkinter as ctk
 from typing import Optional
-from services import GoalService
+from services.goal_service import GoalService
 from database import DatabaseManager
 from ui.theme_manager import ThemeManager
 from ui.dashboard_view import DashboardView
@@ -262,7 +262,7 @@ class MainWindow(ctk.CTk):
         self._clear_right_panel()
         self._set_nav_active("vision")
 
-        from ui.vision_board_view import VisionBoardView
+        from ui.vision_board import VisionBoardView
 
         self.current_view = VisionBoardView(
             self.right_frame,

@@ -1,26 +1,22 @@
+#!/usr/bin/env python3
 """
 main.py
-Point d'entrée avec thème clair forcé.
+Point d'entrée de l'application Goals Manager.
 """
 
 import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent))
-
-import customtkinter as ctk
-from ui.theme_manager import ThemeManager
-from ui.main_window import MainWindow
-
-from dotenv import load_dotenv
 import os
 
-load_dotenv()  # Charge les variables du fichier .env
+# Ajouter la racine du projet au path
+_project_root = os.path.dirname(os.path.abspath(__file__))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 
-api_key = os.getenv("UNSPLASH_API_KEY")
+from ui.main_window import MainWindow
 
-def main() -> None:
-    ThemeManager.setup_theme()
+
+def main():
+    """Lance l'application."""
     app = MainWindow()
     app.run()
 

@@ -8,7 +8,7 @@ import customtkinter as ctk
 from typing import Callable, List
 from PIL import Image, ImageDraw, ImageFilter
 from models import Goal
-from services import GoalService
+from services.goal_service import GoalService
 
 
 class GoalsGridView(ctk.CTkFrame):

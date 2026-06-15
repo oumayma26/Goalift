@@ -7,7 +7,7 @@ import customtkinter as ctk
 from tkinter import messagebox, colorchooser, filedialog
 from typing import Optional, Callable
 from models import Goal, Task
-from services import GoalService
+from services.goal_service import GoalService
 from PIL import Image
 import os
 
