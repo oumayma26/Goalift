@@ -88,6 +88,11 @@ class MainWindow(ctk.CTk):
         )
         self.vision_btn.pack(fill="x", pady=3)
 
+        self.habits_btn = self._create_nav_button(
+            nav_frame, "📅 Habitudes", self._show_habits_view, active=False
+        )
+        self.habits_btn.pack(fill="x", pady=3)
+
         # Séparateur
         ctk.CTkFrame(self.left_frame, height=1, fg_color="#E2E8F0").grid(
             row=2, column=0, sticky="ew", padx=20, pady=15
@@ -401,23 +406,8 @@ class MainWindow(ctk.CTk):
         if not isinstance(self.current_view, GoalsGridView):
             return
 
-        for widget in self.current_view.scroll.winfo_children():
-            widget.destroy()
-
         goals = self._get_filtered_goals()
-
-        for widget in self.current_view.winfo_children():
-            if isinstance(widget, ctk.CTkFrame) and widget != self.current_view.scroll:
-                for child in widget.winfo_children():
-                    if isinstance(child, ctk.CTkLabel) and "Objectifs" in child.cget("text"):
-                        child.configure(text=f"🎯 Objectifs ({len(goals)})")
-
-        if not goals:
-            self.current_view._build_empty_state()
-            return
-
-        for idx, goal in enumerate(goals):
-            self.current_view._create_goal_card(goal, idx)
+        self.current_view.refresh(goals)
 
     def _create_sidebar_goal_item(self, goal) -> None:
         """Item compact dans la sidebar."""
@@ -478,7 +468,8 @@ class MainWindow(ctk.CTk):
         buttons = {
             "dashboard": self.dashboard_btn,
             "goals": self.goals_btn,
-            "vision": self.vision_btn
+            "vision": self.vision_btn,
+            "habits": self.habits_btn
         }
 
         for key, btn in buttons.items():
@@ -499,3 +490,14 @@ class MainWindow(ctk.CTk):
 
     def run(self) -> None:
         self.mainloop()
+
+    def _show_habits_view(self) -> None:
+        self._clear_right_panel()
+        self._set_nav_active("habits")
+
+        from ui.habits import HabitsView
+        self.current_view = HabitsView(
+            self.right_frame,
+            db=self.db
+        )
+        self.current_view.grid(row=0, column=0, sticky="nsew")

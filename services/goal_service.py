@@ -41,6 +41,7 @@ class GoalService:
             color=color,
             image_path=image_path
         )
+        print(f"Goal créé avec ID {goal_id}")
         row = self.db.get_goal_by_id(goal_id)
         return Goal.from_db_row(row)
 

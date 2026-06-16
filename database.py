@@ -86,6 +86,8 @@ class DatabaseManager:
                 )
             """)
 
+            
+
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_tasks_goal_id ON tasks(goal_id)
             """)
@@ -110,7 +112,53 @@ class DatabaseManager:
                 cursor.execute("ALTER TABLE goals ADD COLUMN image_path TEXT")
                 conn.commit()
 
+                
+
             conn.commit()
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS habits (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    goal_id INTEGER REFERENCES goals(id) ON DELETE SET NULL,
+                    task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+                    frequency TEXT DEFAULT 'daily' 
+                        CHECK(frequency IN ('daily', 'weekly', 'custom')),
+                    target_days TEXT,
+                    color TEXT DEFAULT '#3B82F6',
+                    icon TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    archived_at TEXT
+                )
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS habit_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    habit_id INTEGER NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+                    log_date TEXT NOT NULL,
+                    status TEXT NOT NULL
+                        CHECK(status IN ('done', 'missed', 'partial')),
+                    note TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(habit_id, log_date)
+                )
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_habits_task ON habits(task_id);
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON habit_logs(habit_id, log_date)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_habits_goal ON habits(goal_id)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_habits_archived ON habits(archived_at)
+            """)
             print(f"✅ Base de données initialisée : {self.db_path}")
 
     def create_goal(
@@ -457,3 +505,225 @@ class DatabaseManager:
                 GROUP BY status
             """)
             return {row[0]: row[1] for row in cursor.fetchall()}
+        
+
+    # ═══════════════════════════════════════════════════
+    # HABITS
+    # ═══════════════════════════════════════════════════
+
+    def create_habit(
+        self,
+        title: str,
+        description: Optional[str] = None,
+        goal_id: Optional[int] = None,
+        task_id: Optional[int] = None,  # NOUVEAU
+        frequency: str = "daily",
+        target_days: Optional[str] = None,
+        color: str = "#3B82F6",
+        icon: Optional[str] = None
+    ) -> int:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO habits (title, description, goal_id, task_id, frequency, target_days, color, icon)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (title, description, goal_id, task_id, frequency, target_days, color, icon))
+            return cursor.lastrowid
+
+    def get_habit_by_id(self, habit_id: int) -> Optional[sqlite3.Row]:
+        """Récupère une habitude par son ID."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM habits WHERE id = ?", (habit_id,))
+            return cursor.fetchone()
+
+    def get_all_habits(self, include_archived: bool = False) -> list[sqlite3.Row]:
+        """Récupère toutes les habitudes actives."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            if include_archived:
+                cursor.execute("SELECT * FROM habits ORDER BY created_at DESC")
+            else:
+                cursor.execute("""
+                    SELECT * FROM habits 
+                    WHERE archived_at IS NULL 
+                    ORDER BY created_at DESC
+                """)
+            return cursor.fetchall()
+
+    def get_habits_by_goal_id(self, goal_id: int) -> list[sqlite3.Row]:
+        """Habitudes liées à un goal."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM habits 
+                WHERE goal_id = ? AND archived_at IS NULL
+                ORDER BY created_at DESC
+            """, (goal_id,))
+            return cursor.fetchall()
+
+    def update_habit(
+        self,
+        habit_id: int,
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+        goal_id: Optional[int] = None,
+        task_id: Optional[int] = None,  # NOUVEAU
+        frequency: Optional[str] = None,
+        target_days: Optional[str] = None,
+        color: Optional[str] = None,
+        icon: Optional[str] = None
+    ) -> bool:
+        """Met à jour une habitude."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            updates = []
+            params = []
+
+            if title is not None:
+                updates.append("title = ?")
+                params.append(title)
+            if description is not None:
+                updates.append("description = ?")
+                params.append(description)
+            if goal_id is not None:
+                updates.append("goal_id = ?")
+                params.append(goal_id)
+
+            if task_id is not None:
+                updates.append("task_id = ?")
+                params.append(task_id)
+            if frequency is not None:
+                updates.append("frequency = ?")
+                params.append(frequency)
+            if target_days is not None:
+                updates.append("target_days = ?")
+                params.append(target_days)
+            if color is not None:
+                updates.append("color = ?")
+                params.append(color)
+            if icon is not None:
+                updates.append("icon = ?")
+                params.append(icon)
+
+            if not updates:
+                return False
+
+            params.append(habit_id)
+            query = f"UPDATE habits SET {', '.join(updates)} WHERE id = ?"
+            cursor.execute(query, params)
+            return cursor.rowcount > 0
+
+    def archive_habit(self, habit_id: int) -> bool:
+        """Archive une habitude (soft delete)."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            now = datetime.now().isoformat()
+            cursor.execute(
+                "UPDATE habits SET archived_at = ? WHERE id = ?",
+                (now, habit_id)
+            )
+            return cursor.rowcount > 0
+
+    def delete_habit(self, habit_id: int) -> bool:
+        """Supprime définitivement une habitude et ses logs."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM habits WHERE id = ?", (habit_id,))
+            return cursor.rowcount > 0
+
+    # ═══════════════════════════════════════════════════
+    # HABIT LOGS
+    # ═══════════════════════════════════════════════════
+
+    def create_or_update_habit_log(
+        self,
+        habit_id: int,
+        log_date: str,
+        status: str,
+        note: Optional[str] = None
+    ) -> int:
+        """Crée ou met à jour un log (upsert)."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO habit_logs (habit_id, log_date, status, note)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(habit_id, log_date) DO UPDATE SET
+                    status = excluded.status,
+                    note = excluded.note
+            """, (habit_id, log_date, status, note))
+            return cursor.lastrowid
+
+    def get_habit_logs(
+        self,
+        habit_id: int,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> list[sqlite3.Row]:
+        """Récupère les logs d'une habitude, optionnellement filtrés par date."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            query = "SELECT * FROM habit_logs WHERE habit_id = ?"
+            params = [habit_id]
+
+            if start_date:
+                query += " AND log_date >= ?"
+                params.append(start_date)
+            if end_date:
+                query += " AND log_date <= ?"
+                params.append(end_date)
+
+            query += " ORDER BY log_date"
+            cursor.execute(query, params)
+            return cursor.fetchall()
+
+    def get_habit_log_for_date(self, habit_id: int, log_date: str) -> Optional[sqlite3.Row]:
+        """Log spécifique pour une date."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM habit_logs 
+                WHERE habit_id = ? AND log_date = ?
+            """, (habit_id, log_date))
+            return cursor.fetchone()
+
+    def delete_habit_log(self, habit_id: int, log_date: str) -> bool:
+        """Supprime un log spécifique."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                DELETE FROM habit_logs 
+                WHERE habit_id = ? AND log_date = ?
+            """, (habit_id, log_date))
+            return cursor.rowcount > 0
+
+    def get_habit_month_stats(self, habit_id: int, year: int, month: int) -> dict:
+        """Stats pour un mois donné."""
+        from calendar import monthrange
+        total_days = monthrange(year, month)[1]
+        
+        start = f"{year}-{month:02d}-01"
+        end = f"{year}-{month:02d}-{total_days:02d}"
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT status, COUNT(*) as count
+                FROM habit_logs
+                WHERE habit_id = ? AND log_date >= ? AND log_date <= ?
+                GROUP BY status
+            """, (habit_id, start, end))
+
+            stats = {row[0]: row[1] for row in cursor.fetchall()}
+            done = stats.get("done", 0)
+            missed = stats.get("missed", 0)
+            partial = stats.get("partial", 0)
+
+            return {
+                "done": done,
+                "missed": missed,
+                "partial": partial,
+                "total_logged": done + missed + partial,
+                "rate": round(done / total_days * 100, 1) if total_days else 0
+            }

@@ -1,0 +1,236 @@
+"""
+ui/habits/habit_calendar_grid.py
+Grille calendrier mois par mois pour habit tracker.
+Style : lignes = habits, colonnes = jours, toggle rapide au clic.
+"""
+
+import calendar
+from datetime import date
+from typing import Callable, Dict, List, Optional
+
+import customtkinter as ctk
+import tkinter as tk
+
+
+class HabitCalendarGrid(ctk.CTkFrame):
+    """
+    Grille mois × habits.
+    Header : jours 1-31
+    Rows : une par habitude avec nom + cases à cocher
+    """
+
+    def __init__(
+        self,
+        master,
+        year: int,
+        month: int,
+        habits: List[dict],
+        logs_by_habit: Dict[int, Dict[str, str]],
+        on_toggle: Callable[[int, str, Optional[str]], None],
+        **kwargs
+    ):
+        super().__init__(master, fg_color="transparent", **kwargs)
+
+        self.year = year
+        self.month = month
+        self.habits = habits
+        self.logs_by_habit = logs_by_habit
+        self.on_toggle = on_toggle
+
+        self._day_cells: Dict[tuple, ctk.CTkFrame] = {}
+
+        self._build_grid()
+
+    def _build_grid(self) -> None:
+        """Construit la grille entière."""
+        _, num_days = calendar.monthrange(self.year, self.month)
+
+        # Config grid : colonne 0 = nom habit, colonnes 1-31 = jours
+        self.grid_columnconfigure(0, minsize=180)
+        for day in range(1, num_days + 1):
+            self.grid_columnconfigure(day, minsize=36)
+
+        self._build_header(num_days)
+
+        for row_idx, habit in enumerate(self.habits, start=1):
+            self._build_habit_row(habit, row_idx, num_days)
+
+    def _build_header(self, num_days: int) -> None:
+        corner = ctk.CTkFrame(self, fg_color="transparent", height=36)
+        corner.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
+
+        for day in range(1, num_days + 1):
+            is_today = self._is_today(day)
+            bg = "#3B82F6" if is_today else "#F1F5F9"
+            fg = "#FFFFFF" if is_today else "#64748B"
+
+            cell = ctk.CTkFrame(self, fg_color=bg, corner_radius=4, height=32, width=34)
+            cell.grid(row=0, column=day, sticky="nsew", padx=1, pady=2)
+
+            label = ctk.CTkLabel(
+                cell, text=str(day),
+                font=ctk.CTkFont(size=10, weight="bold" if is_today else "normal"),
+                text_color=fg, width=28
+            )
+            label.place(relx=0.5, rely=0.5, anchor="center")
+
+    def _build_habit_row(self, habit: dict, row: int, num_days: int) -> None:
+        habit_id = habit["id"]
+        color = habit.get("color", "#3B82F6")
+        icon = habit.get("icon", "•")
+        title = habit["title"]
+
+        name_cell = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=6, height=40)
+        name_cell.grid(row=row, column=0, sticky="nsew", padx=2, pady=1)
+
+        indicator = ctk.CTkFrame(name_cell, fg_color=color, corner_radius=3, width=4, height=20)
+        indicator.place(relx=0.02, rely=0.5, anchor="w")
+
+        ctk.CTkLabel(
+            name_cell,
+            text=f"{icon} {title}",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="#1E293B",
+            anchor="w"
+        ).place(relx=0.06, rely=0.5, anchor="w")
+
+        linked_text = self._get_linked_text(habit)
+        if linked_text:
+            ctk.CTkLabel(
+                name_cell,
+                text=linked_text,
+                font=ctk.CTkFont(size=9),
+                text_color="#94A3B8",
+                anchor="w"
+            ).place(relx=0.06, rely=0.7, anchor="w")
+
+        for day in range(1, num_days + 1):
+            self._build_day_cell(habit_id, day, row, color)
+
+    def _build_day_cell(self, habit_id: int, day: int, row: int, habit_color: str) -> None:
+        date_iso = f"{self.year}-{self.month:02d}-{day:02d}"
+        status = self._get_status(habit_id, date_iso)
+        is_today = self._is_today(day)
+
+        if status == "done":
+            bg = habit_color
+            fg = "#FFFFFF"
+            text = "✓"
+        elif status == "missed":
+            bg = "#FEE2E2"
+            fg = "#DC2626"
+            text = "✗"
+        elif status == "partial":
+            bg = "#FEF3C7"
+            fg = "#D97706"
+            text = "~"
+        else:
+            bg = "#F8FAFC" if not is_today else "#EFF6FF"
+            fg = "#CBD5E1"
+            text = ""
+
+        cell = ctk.CTkFrame(
+            self, fg_color=bg, corner_radius=4,
+            border_width=1 if is_today else 0,
+            border_color="#3B82F6",
+            height=32, width=34
+        )
+        cell.grid(row=row, column=day, sticky="nsew", padx=1, pady=1)
+
+        if text:
+            label = ctk.CTkLabel(
+                cell, text=text,
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color=fg, width=28
+            )
+            label.place(relx=0.5, rely=0.5, anchor="center")
+
+        cell.bind("<Button-1>", lambda e, hid=habit_id, d=date_iso, s=status:
+                  self._on_cell_click(hid, d, s))
+        for child in cell.winfo_children():
+            child.bind("<Button-1>", lambda e, hid=habit_id, d=date_iso, s=status:
+                      self._on_cell_click(hid, d, s))
+
+        self._day_cells[(habit_id, day)] = cell
+
+    def _on_cell_click(self, habit_id: int, date_iso: str, current_status: Optional[str]) -> None:
+        cycle = {None: "done", "done": "missed", "missed": "partial", "partial": None}
+        new_status = cycle.get(current_status, "done")
+
+        self._update_cell_visual(habit_id, date_iso, new_status)
+        self.on_toggle(habit_id, date_iso, new_status)
+
+    def _update_cell_visual(self, habit_id: int, date_iso: str, status: Optional[str]) -> None:
+        day = int(date_iso.split("-")[2])
+        cell = self._day_cells.get((habit_id, day))
+        if not cell:
+            return
+
+        habit = next((h for h in self.habits if h["id"] == habit_id), None)
+        habit_color = habit.get("color", "#3B82F6") if habit else "#3B82F6"
+
+        if status == "done":
+            bg = habit_color
+            fg = "#FFFFFF"
+            text = "✓"
+        elif status == "missed":
+            bg = "#FEE2E2"
+            fg = "#DC2626"
+            text = "✗"
+        elif status == "partial":
+            bg = "#FEF3C7"
+            fg = "#D97706"
+            text = "~"
+        else:
+            is_today = self._is_today(day)
+            bg = "#F8FAFC" if not is_today else "#EFF6FF"
+            fg = "#CBD5E1"
+            text = ""
+
+        cell.configure(fg_color=bg)
+        for child in cell.winfo_children():
+            child.destroy()
+
+        if text:
+            label = ctk.CTkLabel(
+                cell, text=text,
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color=fg, width=28
+            )
+            label.place(relx=0.5, rely=0.5, anchor="center")
+            label.bind("<Button-1>", lambda e, hid=habit_id, d=date_iso, s=status:
+                      self._on_cell_click(hid, d, s))
+
+        cell.bind("<Button-1>", lambda e, hid=habit_id, d=date_iso, s=status:
+                  self._on_cell_click(hid, d, s))
+
+        if habit_id not in self.logs_by_habit:
+            self.logs_by_habit[habit_id] = {}
+        if status:
+            self.logs_by_habit[habit_id][date_iso] = status
+        else:
+            self.logs_by_habit[habit_id].pop(date_iso, None)
+
+    def _get_status(self, habit_id: int, date_iso: str) -> Optional[str]:
+        return self.logs_by_habit.get(habit_id, {}).get(date_iso)
+
+    def _is_today(self, day: int) -> bool:
+        today = date.today()
+        return today.year == self.year and today.month == self.month and today.day == day
+
+    def refresh_logs(self, new_logs: Dict[int, Dict[str, str]]) -> None:
+        self.logs_by_habit = new_logs
+        for (habit_id, day), cell in self._day_cells.items():
+            date_iso = f"{self.year}-{self.month:02d}-{day:02d}"
+            status = self._get_status(habit_id, date_iso)
+            self._update_cell_visual(habit_id, date_iso, status)
+
+    def _get_linked_text(self, habit: dict) -> str:
+        goal_title = habit.get("goal_title")
+        task_name = habit.get("task_name")
+
+        if task_name and goal_title:
+            return f"↳ {goal_title} › {task_name}"
+        elif goal_title:
+            return f"↳ {goal_title}"
+        return ""

@@ -44,6 +44,7 @@ class Goal:
     @classmethod
     def from_db_row(cls, row: sqlite3.Row) -> "Goal":
         """Crée un Goal à partir d'une ligne SQLite."""
+        print(f"DEBUG from_db_row: row={dict(row)}, type={type(row)}")
         return cls(
             id=row["id"],
             title=row["title"],

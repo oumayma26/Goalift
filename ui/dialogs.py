@@ -394,7 +394,7 @@ class GoalDialog(ctk.CTkToplevel):
                     color=color,
                     image_path=None
                 )
-
+                print(f"DEBUG new_goal={new_goal}, type={type(new_goal)}")
                 final_image_path = None
                 if self.temp_image_path:
                     final_image_path = self.service.save_goal_image(new_goal.id, self.temp_image_path)
