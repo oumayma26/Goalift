@@ -86,6 +86,36 @@ class DatabaseManager:
                 )
             """)
 
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS vision_board_texts (
+                    id INTEGER PRIMARY KEY,
+                    text TEXT NOT NULL,
+                    x REAL DEFAULT 100,
+                    y REAL DEFAULT 100,
+                    font_family TEXT DEFAULT 'Arial',
+                    font_size INTEGER DEFAULT 16,
+                    bold INTEGER DEFAULT 0,
+                    italic INTEGER DEFAULT 0,
+                    color TEXT DEFAULT '#1E293B',
+                    background TEXT,
+                    opacity INTEGER DEFAULT 0
+                )
+            """)
+        
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS vision_board_mood (
+                    id INTEGER PRIMARY KEY,
+                    image_path TEXT NOT NULL,
+                    title TEXT DEFAULT '',
+                    x REAL DEFAULT 100,
+                    y REAL DEFAULT 100,
+                    width REAL DEFAULT 280,
+                    height REAL DEFAULT 190,
+                    color TEXT DEFAULT '#3B82F6',
+                    rotation REAL DEFAULT 0,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
             
 
             cursor.execute("""
@@ -112,8 +142,7 @@ class DatabaseManager:
                 cursor.execute("ALTER TABLE goals ADD COLUMN image_path TEXT")
                 conn.commit()
 
-                
-
+            
             conn.commit()
 
             cursor.execute("""

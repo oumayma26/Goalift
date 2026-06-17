@@ -361,6 +361,33 @@ def define_target_schema() -> Schema:
         .fk("habit_id", "habits", "id", on_delete="CASCADE")\
         .index("idx_habit_logs_date", "habit_id", "log_date")\
         .build()
+    
+    s.table("vision_board_texts")\
+        .col("id", "INTEGER", nullable=False, primary_key=True)\
+        .col("text", "TEXT", nullable=False)\
+        .col("x", "REAL", default="100")\
+        .col("y", "REAL", default="100")\
+        .col("font_family", "TEXT", default="'Arial'")\
+        .col("font_size", "INTEGER", default="16")\
+        .col("bold", "INTEGER", default="0")\
+        .col("italic", "INTEGER", default="0")\
+        .col("color", "TEXT", default="'#1E293B'")\
+        .col("background", "TEXT")\
+        .col("opacity", "INTEGER", default="0")\
+        .build()
+
+    s.table("vision_board_mood")\
+        .col("id", "INTEGER", nullable=False, primary_key=True)\
+        .col("image_path", "TEXT", nullable=False)\
+        .col("title", "TEXT", default="''")\
+        .col("x", "REAL", default="100")\
+        .col("y", "REAL", default="100")\
+        .col("width", "REAL", default="280")\
+        .col("height", "REAL", default="190")\
+        .col("color", "TEXT", default="'#3B82F6'")\
+        .col("rotation", "REAL", default="0")\
+        .col("created_at", "TEXT", default="CURRENT_TIMESTAMP")\
+        .build()
 
     return s
 

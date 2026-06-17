@@ -22,57 +22,20 @@ class VisionBoardService:
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:
-        """Crée les tables si elles n'existent pas."""
+        """Vérifie que les tables existent (créées par database.py + migrations)."""
         with self.db._get_connection() as conn:
             cursor = conn.cursor()
-
-            # Positions des goals sur le board
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS vision_board (
-                    goal_id INTEGER PRIMARY KEY,
-                    motivation_text TEXT DEFAULT '',
-                    pos_x REAL DEFAULT 0,
-                    pos_y REAL DEFAULT 0,
-                    width REAL DEFAULT 280,
-                    height REAL DEFAULT 190,
-                    FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE CASCADE
-                )
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name IN ('vision_board', 'vision_board_texts', 'vision_board_mood')
             """)
-
-            # Textes flottants
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS vision_board_texts (
-                    id INTEGER PRIMARY KEY,
-                    text TEXT NOT NULL,
-                    x REAL DEFAULT 100,
-                    y REAL DEFAULT 100,
-                    font_family TEXT DEFAULT 'Arial',
-                    font_size INTEGER DEFAULT 16,
-                    bold INTEGER DEFAULT 0,
-                    italic INTEGER DEFAULT 0,
-                    color TEXT DEFAULT '#1E293B',
-                    background TEXT,
-                    opacity INTEGER DEFAULT 0
+            existing = {row[0] for row in cursor.fetchall()}
+            required = {"vision_board", "vision_board_texts", "vision_board_mood"}
+            if missing := required - existing:
+                raise RuntimeError(
+                    f"Tables manquantes : {missing}. "
+                    "Lancez database.py et les migrations d'abord."
                 )
-            """)
-
-            # Images mood (non liées à un goal)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS vision_board_mood (
-                    id INTEGER PRIMARY KEY,
-                    image_path TEXT NOT NULL,
-                    title TEXT DEFAULT '',
-                    x REAL DEFAULT 100,
-                    y REAL DEFAULT 100,
-                    width REAL DEFAULT 280,
-                    height REAL DEFAULT 190,
-                    color TEXT DEFAULT '#3B82F6',
-                    rotation REAL DEFAULT 0,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-
-            conn.commit()
 
     # ═══════════════════════════════════════════════════
     # GOALS (positions)
