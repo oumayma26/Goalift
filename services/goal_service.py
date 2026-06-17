@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
-from database import DatabaseManager
+from database.database import DatabaseManager
 from models.goal import Goal, Task
 
 

@@ -7,7 +7,7 @@ from typing import Callable, Optional, Dict
 
 import customtkinter as ctk
 
-from database import DatabaseManager
+from database.database import DatabaseManager
 from services.habit_service import HabitService
 
 

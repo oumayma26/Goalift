@@ -8,7 +8,7 @@ import sqlite3
 from typing import Optional, List, Dict
 from dataclasses import asdict
 
-from database import DatabaseManager
+from database.database import DatabaseManager
 from models.vision_board import VisionItem, FloatingText, TextStyle
 
 class VisionBoardService:

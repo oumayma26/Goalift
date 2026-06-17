@@ -7,7 +7,7 @@ import os
 import customtkinter as ctk
 from typing import Optional
 from services.goal_service import GoalService
-from database import DatabaseManager
+from database.database import DatabaseManager
 from ui.theme_manager import ThemeManager
 from ui.dashboard_view import DashboardView
 from ui.goals_grid_view import GoalsGridView

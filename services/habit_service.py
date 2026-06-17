@@ -7,7 +7,7 @@ import json
 from datetime import date
 from typing import Dict, List, Optional
 
-from database import DatabaseManager
+from database.database import DatabaseManager
 
 
 class HabitService:

@@ -9,7 +9,7 @@ from typing import Dict, Optional
 import customtkinter as ctk
 import tkinter as tk
 
-from database import DatabaseManager
+from database.database import DatabaseManager
 from services.goal_service import GoalService
 from services.vision_board_service import VisionBoardService
 from models.vision_board import VisionItem, FloatingText, TextStyle

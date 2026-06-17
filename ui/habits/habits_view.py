@@ -10,7 +10,7 @@ from typing import Dict, List, Optional
 import customtkinter as ctk
 import tkinter as tk
 
-from database import DatabaseManager
+from database.database import DatabaseManager
 from services.habit_service import HabitService
 from .habit_calendar_grid import HabitCalendarGrid
 from .habit_dialog import HabitDialog
