@@ -20,7 +20,7 @@ from utils.arabic_text import (
 
 from database.database import DatabaseManager
 from services.habit_service import HabitService
-from utils.arabic_keyboard import ArabicKeyboardEntry
+from utils.arabic_keyboard import ArabicKeyboardEntry, ArabicKeyboardTextbox
 
 
 class HabitDialog(ctk.CTkToplevel):
@@ -80,14 +80,14 @@ class HabitDialog(ctk.CTkToplevel):
             text_color="#1E293B"
         ).pack(pady=(15, 10), padx=20, anchor="w")
 
-        # Nom
+        # Nom — ArabicKeyboardEntry (single line)
         ArabicCTkLabel(
             content, text=prepare_for_display("Nom:"),
             font=ctk.CTkFont(size=12, weight="bold"), text_color="#475569"
         ).pack(padx=20, anchor="w", pady=(10, 5))
-        self.name_entry = ArabicKeyboardEntry(
+        self.name_entry = ArabicKeyboardTextbox(
             content,
-            height=40,
+            height=40,           # Hauteur single line
             font=ctk.CTkFont(size=13),
             fg_color="#F8FAFC",
             border_color="#E2E8F0",
@@ -96,14 +96,14 @@ class HabitDialog(ctk.CTkToplevel):
         )
         self.name_entry.pack(fill="x", padx=20, pady=5)
 
-        # Description
+        # Description — CORRECTION : ArabicKeyboardTextbox (multi-lignes)
         ArabicCTkLabel(
             content, text=prepare_for_display("Description (optionnel):"),
             font=ctk.CTkFont(size=12, weight="bold"), text_color="#475569"
         ).pack(padx=20, anchor="w", pady=(10, 5))
-        self.desc_entry = ArabicKeyboardEntry(
+        self.desc_entry = ArabicKeyboardTextbox(
             content,
-            height=40,
+            height=80,
             font=ctk.CTkFont(size=13),
             fg_color="#F8FAFC",
             border_color="#E2E8F0",
@@ -218,7 +218,7 @@ class HabitDialog(ctk.CTkToplevel):
         )
         self.goal_menu.pack(side="left", padx=5)
 
-        # Tâche (désactivée tant qu'aucun goal n'est sélectionné)
+        # Tâche
         task_row = ctk.CTkFrame(link_frame, fg_color="transparent")
         task_row.pack(fill="x", padx=12, pady=(4, 8))
 
@@ -265,21 +265,35 @@ class HabitDialog(ctk.CTkToplevel):
         if not habit:
             return
 
-        self.name_entry.insert(0, habit["title"])
-        if habit.get("description"):
-            self.desc_entry.insert("0.0", habit["description"])
+        # Nom — ArabicKeyboardEntry
+        self.name_entry.delete(0, "end")
+        self.name_entry.insert(0, habit.get("title", ""))
+
+        # Description — CORRECTION : ArabicKeyboardTextbox
+        self.desc_entry.set_value(habit.get("description", ""))
+
         self.freq_var.set(habit.get("frequency", "daily"))
         self.color_var.set(habit.get("color", "#3B82F6"))
         if habit.get("icon"):
             self.icon_var.set(habit["icon"])
 
-        # Goal / Task — affichage reshapé
+        # Jours spécifiques
+        if habit.get("target_days"):
+            try:
+                days = json.loads(habit["target_days"])
+                for i in days:
+                    if i in self.days_vars:
+                        self.days_vars[i].set(True)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Goal / Task
         if habit.get("goal_id") and self.goal_service:
             goal = self.goal_service.get_goal(habit["goal_id"])
             if goal:
                 display_title = prepare_for_display(goal.title)
                 self.goal_var.set(display_title)
-                self._on_goal_selected(goal.title)  # passe le logique
+                self._on_goal_selected(goal.title)
 
                 if habit.get("task_id"):
                     tasks = self._tasks_by_goal.get(goal.id, [])
@@ -293,7 +307,8 @@ class HabitDialog(ctk.CTkToplevel):
         if not title:
             return
 
-        desc = self.desc_entry.get("0.0", "end").strip()
+        # CORRECTION : ArabicKeyboardTextbox.get() retourne directement le texte
+        desc = self.desc_entry.get().strip()
         freq = self.freq_var.get()
 
         target_days = None
@@ -301,7 +316,7 @@ class HabitDialog(ctk.CTkToplevel):
             days = [i for i, var in self.days_vars.items() if var.get()]
             target_days = json.dumps(days)
 
-        # Récupérer goal_id et task_id depuis les valeurs originales
+        # Récupérer goal_id et task_id
         goal_display = self.goal_var.get()
         goal_id = None
         for orig_name, gid in self._goal_map.items():

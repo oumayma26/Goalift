@@ -1,6 +1,6 @@
 """
 ui/habits/habit_calendar_grid.py
-Grille calendrier avec actions d'archivage, restauration et suppression.
+Grille calendrier avec actions : éditer, archiver, restaurer, supprimer.
 """
 
 import calendar
@@ -26,6 +26,7 @@ class HabitCalendarGrid(ctk.CTkFrame):
         habits: List[dict],
         logs_by_habit: Dict[int, Dict[str, str]],
         on_toggle: Callable[[int, str, Optional[str]], None],
+        on_edit: Optional[Callable[[int], None]] = None,
         on_archive: Optional[Callable[[int], None]] = None,
         on_restore: Optional[Callable[[int], None]] = None,
         on_delete: Optional[Callable[[int], None]] = None,
@@ -41,6 +42,7 @@ class HabitCalendarGrid(ctk.CTkFrame):
         self.habits = habits
         self.logs_by_habit = logs_by_habit
         self.on_toggle = on_toggle
+        self.on_edit = on_edit
         self.on_archive = on_archive
         self.on_restore = on_restore
         self.on_delete = on_delete
@@ -57,7 +59,7 @@ class HabitCalendarGrid(ctk.CTkFrame):
         _, num_days = calendar.monthrange(self.year, self.month)
 
         # Colonne 0 = nom + actions, colonnes 1-31 = jours
-        self.grid_columnconfigure(0, minsize=220)  # Plus large pour les boutons
+        self.grid_columnconfigure(0, minsize=250)  # Plus large pour les boutons
         for day in range(1, num_days + 1):
             self.grid_columnconfigure(day, minsize=36)
 
@@ -142,7 +144,14 @@ class HabitCalendarGrid(ctk.CTkFrame):
         actions.pack(side="right", padx=(0, 5))
 
         if self.is_archived_view:
-            # Mode archivé : Restaurer + Supprimer
+            # Mode archivé : Éditer + Restaurer + Supprimer
+            ctk.CTkButton(
+                actions, text="✏️", width=28, height=28, corner_radius=4,
+                fg_color="#EFF6FF", hover_color="#DBEAFE",
+                text_color="#3B82F6", font=ctk.CTkFont(size=12),
+                command=lambda hid=habit_id: self._on_edit(hid) if self.on_edit else None
+            ).pack(side="left", padx=1)
+
             ctk.CTkButton(
                 actions, text="↩️", width=28, height=28, corner_radius=4,
                 fg_color="#D1FAE5", hover_color="#A7F3D0",
@@ -157,7 +166,14 @@ class HabitCalendarGrid(ctk.CTkFrame):
                 command=lambda hid=habit_id: self._on_delete(hid) if self.on_delete else None
             ).pack(side="left", padx=1)
         else:
-            # Mode actif : Archiver + Supprimer
+            # Mode actif : Éditer + Archiver + Supprimer
+            ctk.CTkButton(
+                actions, text="✏️", width=28, height=28, corner_radius=4,
+                fg_color="#EFF6FF", hover_color="#DBEAFE",
+                text_color="#3B82F6", font=ctk.CTkFont(size=12),
+                command=lambda hid=habit_id: self._on_edit(hid) if self.on_edit else None
+            ).pack(side="left", padx=1)
+
             ctk.CTkButton(
                 actions, text="📦", width=28, height=28, corner_radius=4,
                 fg_color="#F1F5F9", hover_color="#E2E8F0",
@@ -276,6 +292,10 @@ class HabitCalendarGrid(ctk.CTkFrame):
             self.logs_by_habit[habit_id][date_iso] = status
         else:
             self.logs_by_habit[habit_id].pop(date_iso, None)
+
+    def _on_edit(self, habit_id: int) -> None:
+        if self.on_edit:
+            self.on_edit(habit_id)
 
     def _on_archive(self, habit_id: int) -> None:
         if self.on_archive:

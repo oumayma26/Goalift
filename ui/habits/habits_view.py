@@ -1,7 +1,7 @@
 """
 ui/habits/habits_view.py
 Vue principale du tracker d'habitudes avec support arabe RTL,
-archivage, suppression définitive et vue des archivées.
+archivage, suppression définitive, édition et vue des archivées.
 """
 
 import calendar
@@ -25,7 +25,7 @@ from .habit_dialog import HabitDialog
 
 
 class HabitsView(ctk.CTkFrame):
-    """Vue tracker d'habitudes avec archivage, suppression et support arabe."""
+    """Vue tracker d'habitudes avec archivage, suppression, édition et support arabe."""
 
     def __init__(self, master, db: DatabaseManager, **kwargs):
         super().__init__(master, fg_color="#F8FAFC", **kwargs)
@@ -204,6 +204,7 @@ class HabitsView(ctk.CTkFrame):
             streaks_by_habit=streaks,
             best_streaks_by_habit=best_streaks,
             on_toggle=self._on_habit_toggle,
+            on_edit=self._on_edit_habit,
             on_archive=self._on_archive_habit if not self.show_archived else None,
             on_restore=self._on_restore_habit if self.show_archived else None,
             on_delete=self._on_delete_habit_permanently,
@@ -234,6 +235,17 @@ class HabitsView(ctk.CTkFrame):
             new_streak = self.service.get_current_streak(habit_id)
             new_best = self.service.get_best_streak(habit_id)
             self.calendar_frame.update_streak(habit_id, new_streak, new_best)
+
+    def _on_edit_habit(self, habit_id: int) -> None:
+        """Ouvre le dialog d'édition pré-rempli."""
+        dialog = HabitDialog(
+            self,
+            db=self.db,
+            goal_service=GoalService(self.db),
+            habit_id=habit_id,
+            on_save=self._refresh
+        )
+        dialog.grab_set()
 
     def _on_archive_habit(self, habit_id: int) -> None:
         """Archive une habitude active."""
