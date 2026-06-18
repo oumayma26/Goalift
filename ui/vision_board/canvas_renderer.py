@@ -262,13 +262,11 @@ class CanvasRenderer:
         MAX_WIDTH = 800 if is_arabic else 600
 
         if is_arabic:
-            # 1. Wrap sur le texte original (logique)
-            raw_lines = self._wrap_text(text, font, MAX_WIDTH)
+            # 1. Wrap sur le texte original (logique) avec mesure reshapée
+            raw_lines = self._wrap_text_arabic(text, font, MAX_WIDTH)
 
             # 2. Reshape + BIDI chaque ligne séparément
             try:
-                import arabic_reshaper
-                from bidi.algorithm import get_display
                 lines = []
                 for line in raw_lines:
                     reshaped = arabic_reshaper.reshape(line)
@@ -327,7 +325,7 @@ class CanvasRenderer:
         return ImageTk.PhotoImage(img)
 
     def _wrap_text(self, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list:
-        """Wrap LTR standard."""
+        """Wrap LTR standard pour texte latin."""
         words = text.split()
         lines = []
         current_line = []
@@ -354,8 +352,8 @@ class CanvasRenderer:
 
     def _wrap_text_arabic(self, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list:
         """
-        Wrap pour texte arabe NON reshapé.
-        On split sur les espaces du texte logique (original).
+        Wrap pour texte arabe.
+        Mesure sur le texte reshapé+BIDI pour une largeur correcte.
         """
         words = text.split()
         lines = []
@@ -366,10 +364,8 @@ class CanvasRenderer:
         
         for word in words:
             test_line = " ".join(current_line + [word])
-            # Pour mesurer, on doit reshape+BIDI le test_line
+            # Mesure sur le texte visuel (reshapé + BIDI)
             try:
-                import arabic_reshaper
-                from bidi.algorithm import get_display
                 reshaped = arabic_reshaper.reshape(test_line)
                 display_text = get_display(reshaped)
             except:
@@ -385,32 +381,6 @@ class CanvasRenderer:
                     lines.append(" ".join(current_line))
                 current_line = [word]
         
-        if current_line:
-            lines.append(" ".join(current_line))
-        
-        return lines if lines else [text]
-
-    def _wrap_text_rtl(self, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list:
-        """
-        Wrap pour texte arabe DÉJÀ reshapé + BIDI.
-        Le texte est visuellement LTR après BIDI, donc wrap standard.
-        """
-        words = text.split()
-        lines = []
-        current_line = []
-        
-        dummy = Image.new("RGBA", (1, 1))
-        draw = ImageDraw.Draw(dummy)
-        
-        for word in words:
-            test_line = " ".join(current_line + [word])
-            w = draw.textbbox((0, 0), test_line, font=font)[2]
-            if w <= max_width:
-                current_line.append(word)
-            else:
-                if current_line:
-                    lines.append(" ".join(current_line))
-                current_line = [word]
         if current_line:
             lines.append(" ".join(current_line))
         

@@ -1,6 +1,6 @@
 """
 ui/habits/habits_view.py
-Vue principale du tracker d'habitudes.
+Vue principale du tracker d'habitudes avec support arabe RTL.
 """
 
 import calendar
@@ -10,6 +10,12 @@ from typing import Dict, List, Optional
 import customtkinter as ctk
 import tkinter as tk
 
+from utils.arabic_text import (
+    prepare_for_display,
+    ArabicCTkLabel,
+    ArabicCTkButton,
+)
+
 from database.database import DatabaseManager
 from services.habit_service import HabitService
 from .habit_calendar_grid import HabitCalendarGrid
@@ -17,14 +23,9 @@ from .habit_dialog import HabitDialog
 
 
 class HabitsView(ctk.CTkFrame):
-    """Vue tracker d'habitudes avec grille calendrier."""
+    """Vue tracker d'habitudes avec grille calendrier + support arabe."""
 
-    def __init__(
-        self,
-        master,
-        db: DatabaseManager,
-        **kwargs
-    ):
+    def __init__(self, master, db: DatabaseManager, **kwargs):
         super().__init__(master, fg_color="#F8FAFC", **kwargs)
 
         self.db = db
@@ -50,12 +51,13 @@ class HabitsView(ctk.CTkFrame):
         left = ctk.CTkFrame(header, fg_color="transparent")
         left.pack(side="left", pady=8)
 
-        ctk.CTkLabel(
-            left, text="📅 Habitudes",
+        # Titre avec support arabe
+        ArabicCTkLabel(
+            left, text=prepare_for_display("📅 Habitudes"),
             font=ctk.CTkFont(size=20, weight="bold"), text_color="#1E293B"
         ).pack(side="left")
 
-        self.month_label = ctk.CTkLabel(
+        self.month_label = ArabicCTkLabel(
             left,
             text=self._format_month_year(self.current_year, self.current_month),
             font=ctk.CTkFont(size=14), text_color="#64748B"
@@ -70,21 +72,21 @@ class HabitsView(ctk.CTkFrame):
         left = ctk.CTkFrame(toolbar, fg_color="transparent")
         left.pack(side="left")
 
-        ctk.CTkButton(
+        ArabicCTkButton(
             left, text="◀", width=32, height=32, corner_radius=6,
             fg_color="#F1F5F9", hover_color="#E2E8F0", text_color="#475569",
             font=ctk.CTkFont(size=12, weight="bold"),
             command=self._prev_month
         ).pack(side="left", padx=2)
 
-        ctk.CTkButton(
-            left, text="Aujourd'hui", width=80, height=32, corner_radius=6,
+        ArabicCTkButton(
+            left, text=prepare_for_display("Aujourd'hui"), width=80, height=32, corner_radius=6,
             fg_color="#F1F5F9", hover_color="#E2E8F0", text_color="#475569",
             font=ctk.CTkFont(size=11, weight="bold"),
             command=self._go_to_today
         ).pack(side="left", padx=2)
 
-        ctk.CTkButton(
+        ArabicCTkButton(
             left, text="▶", width=32, height=32, corner_radius=6,
             fg_color="#F1F5F9", hover_color="#E2E8F0", text_color="#475569",
             font=ctk.CTkFont(size=12, weight="bold"),
@@ -94,8 +96,8 @@ class HabitsView(ctk.CTkFrame):
         right = ctk.CTkFrame(toolbar, fg_color="transparent")
         right.pack(side="right")
 
-        ctk.CTkButton(
-            right, text="➕ Nouvelle habitude", width=140, height=32, corner_radius=8,
+        ArabicCTkButton(
+            right, text=prepare_for_display("➕ Nouvelle habitude"), width=140, height=32, corner_radius=8,
             fg_color="#3B82F6", hover_color="#2563EB", text_color="#FFFFFF",
             font=ctk.CTkFont(size=12, weight="bold"),
             command=self._open_new_habit_dialog
@@ -126,7 +128,7 @@ class HabitsView(ctk.CTkFrame):
 
         self.canvas.configure(xscrollcommand=self.h_scroll.set)
 
-        # Frame interne - PAS de width forcée, il prend sa taille naturelle
+        # Frame interne
         self.scroll_inner = ctk.CTkFrame(self.canvas, fg_color="transparent")
         self.canvas_window = self.canvas.create_window((0, 0), window=self.scroll_inner, anchor="nw")
 
@@ -137,10 +139,8 @@ class HabitsView(ctk.CTkFrame):
 
     def _on_inner_configure(self, event=None):
         """Met à jour la région de scroll quand le contenu change."""
-        # Met à jour la scrollregion pour englober tout le contenu
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        
-        # Active/désactive la scrollbar selon besoin
+
         bbox = self.canvas.bbox("all")
         if bbox:
             content_width = bbox[2] - bbox[0]
@@ -150,23 +150,19 @@ class HabitsView(ctk.CTkFrame):
             else:
                 self.h_scroll.grid()
 
-    def _on_canvas_configure(self, event=None):
-        """Adapte la largeur du frame interne au canvas."""
-        canvas_width = event.width if event else self.canvas.winfo_width()
-        self.canvas.itemconfig(self.canvas_window, width=canvas_width)
-
     def _load_habits(self) -> None:
         habits = self.service.list_habits()
         logs = self.service.get_logs_for_month(self.current_year, self.current_month)
 
+        # Reshape les titres arabes des habitudes
         habits_data = [
             {
                 "id": h["id"],
-                "title": h["title"],
+                "title": prepare_for_display(h["title"]),
                 "color": h.get("color", "#3B82F6"),
                 "icon": h.get("icon", "•"),
-                "goal_title": h.get("goal_title"),
-                "task_name": h.get("task_name")
+                "goal_title": prepare_for_display(h.get("goal_title", "")),
+                "task_name": prepare_for_display(h.get("task_name", "")),
             }
             for h in habits
         ]
@@ -204,9 +200,9 @@ class HabitsView(ctk.CTkFrame):
         for widget in self.scroll_inner.winfo_children():
             widget.destroy()
 
-        ctk.CTkLabel(
+        ArabicCTkLabel(
             self.scroll_inner,
-            text="Aucune habitude\nCréez votre première habitude pour commencer le suivi !",
+            text=prepare_for_display("Aucune habitude\nCréez votre première habitude pour commencer le suivi !"),
             font=ctk.CTkFont(size=14), text_color="#94A3B8",
             justify="center"
         ).pack(pady=100)
@@ -216,7 +212,7 @@ class HabitsView(ctk.CTkFrame):
             self.service.toggle_log(habit_id, date_iso, new_status)
         else:
             self.service.delete_log(habit_id, date_iso)
-        
+
         # Mise à jour temps réel du streak
         if self.calendar_frame:
             new_streak = self.service.get_current_streak(habit_id)

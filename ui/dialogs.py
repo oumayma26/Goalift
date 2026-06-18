@@ -1,6 +1,7 @@
 """
 ui/dialogs.py
-Dialogues modaux - Thème CLAIR, couleur et image.
+Dialogues modaux - Theme CLAIR, couleur et image.
+Avec support clavier arabe.
 """
 
 import customtkinter as ctk
@@ -11,8 +12,16 @@ from services.goal_service import GoalService
 from PIL import Image
 import os
 
+from utils.arabic_text import (
+    prepare_for_display,
+    ArabicCTkLabel,
+    ArabicCTkButton,
+)
+from utils.arabic_keyboard import ArabicKeyboardEntry
+
+
 class GoalDialog(ctk.CTkToplevel):
-    """Dialogue Goal avec couleur et image."""
+    """Dialogue Goal avec couleur, image et clavier arabe."""
 
     def __init__(
         self,
@@ -52,54 +61,50 @@ class GoalDialog(ctk.CTkToplevel):
         scroll_frame = ctk.CTkScrollableFrame(self, fg_color="#FFFFFF", corner_radius=0)
         scroll_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=(20, 10))
 
-        ctk.CTkLabel(
+        ArabicCTkLabel(
             scroll_frame,
-            text="Modifier l'objectif" if self.is_edit else "Nouvel objectif",
+            text=prepare_for_display("Modifier l'objectif" if self.is_edit else "Nouvel objectif"),
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color="#1E293B"
         ).pack(anchor="w", pady=(0, 20))
 
         # Titre
-        ctk.CTkLabel(
+        ArabicCTkLabel(
             scroll_frame,
-            text="Titre *",
+            text=prepare_for_display("Titre *"),
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color="#475569"
         ).pack(anchor="w", pady=(0, 5))
 
-        self.title_entry = ctk.CTkEntry(
+        self.title_entry = ArabicKeyboardEntry(
             scroll_frame,
-            placeholder_text="Nom de l'objectif...",
             height=40,
-            corner_radius=8,
-            border_width=1,
-            border_color="#E2E8F0",
+            font=ctk.CTkFont(size=12),
             fg_color="#F8FAFC",
+            border_color="#E2E8F0",
             text_color="#1E293B",
-            font=ctk.CTkFont(size=12)
+            placeholder_text="Nom de l'objectif..."
         )
         self.title_entry.pack(fill="x", pady=(0, 15))
 
         # Description
-        ctk.CTkLabel(
+        ArabicCTkLabel(
             scroll_frame,
-            text="Description",
+            text=prepare_for_display("Description"),
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color="#475569"
         ).pack(anchor="w", pady=(0, 5))
 
-        self.desc_text = ctk.CTkTextbox(
+        self.desc_entry = ArabicKeyboardEntry(
             scroll_frame,
-            height=70,
-            wrap="word",
-            corner_radius=8,
-            border_width=1,
-            border_color="#E2E8F0",
+            height=40,
+            font=ctk.CTkFont(size=12),
             fg_color="#F8FAFC",
+            border_color="#E2E8F0",
             text_color="#1E293B",
-            font=ctk.CTkFont(size=12)
+            placeholder_text="Description..."
         )
-        self.desc_text.pack(fill="x", pady=(0, 15))
+        self.desc_entry.pack(fill="x", pady=(0, 15))
 
         # Date cible
         ctk.CTkLabel(
@@ -125,7 +130,7 @@ class GoalDialog(ctk.CTkToplevel):
         # ─── COULEUR ───
         ctk.CTkLabel(
             scroll_frame,
-            text="🎨 Couleur",
+            text="Couleur",
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color="#475569"
         ).pack(anchor="w", pady=(0, 10))
@@ -146,12 +151,11 @@ class GoalDialog(ctk.CTkToplevel):
         # ─── IMAGE ───
         ctk.CTkLabel(
             scroll_frame,
-            text="🖼️ Image",
+            text="Image",
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color="#475569"
         ).pack(anchor="w", pady=(0, 10))
 
-        # Frame pour l'image
         self.image_frame = ctk.CTkFrame(
             scroll_frame,
             fg_color="#F8FAFC",
@@ -169,13 +173,12 @@ class GoalDialog(ctk.CTkToplevel):
         )
         self.image_label.pack(expand=True)
 
-        # Boutons image
         img_btn_frame = ctk.CTkFrame(scroll_frame, fg_color="transparent")
         img_btn_frame.pack(fill="x", pady=(0, 15))
 
         ctk.CTkButton(
             img_btn_frame,
-            text="📁 Choisir une image",
+            text="Choisir une image",
             height=35,
             corner_radius=8,
             fg_color="#F1F5F9",
@@ -187,7 +190,7 @@ class GoalDialog(ctk.CTkToplevel):
 
         ctk.CTkButton(
             img_btn_frame,
-            text="🗑️ Supprimer",
+            text="Supprimer",
             height=35,
             corner_radius=8,
             fg_color="#FEE2E2",
@@ -197,10 +200,10 @@ class GoalDialog(ctk.CTkToplevel):
             command=self._remove_image
         ).pack(side="left")
 
-        # Priorité
+        # Priorite
         ctk.CTkLabel(
             scroll_frame,
-            text="Priorité",
+            text="Priorite",
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color="#475569"
         ).pack(anchor="w", pady=(0, 5))
@@ -222,7 +225,7 @@ class GoalDialog(ctk.CTkToplevel):
         )
         priorities.pack(fill="x", pady=(0, 15))
 
-        # Statut (édition)
+        # Statut (edition)
         if self.is_edit:
             ctk.CTkLabel(
                 scroll_frame,
@@ -231,10 +234,10 @@ class GoalDialog(ctk.CTkToplevel):
                 text_color="#475569"
             ).pack(anchor="w", pady=(0, 5))
 
-            self.status_var = ctk.StringVar(value=self.goal.status if self.goal else "Non commencé")
+            self.status_var = ctk.StringVar(value=self.goal.status if self.goal else "Non commence")
             ctk.CTkOptionMenu(
                 scroll_frame,
-                values=["Non commencé", "En cours", "Terminé"],
+                values=["Non commence", "En cours", "Termine"],
                 variable=self.status_var,
                 height=40,
                 corner_radius=8,
@@ -257,9 +260,9 @@ class GoalDialog(ctk.CTkToplevel):
             row=0, column=0, columnspan=2, sticky="ew", pady=(0, 15)
         )
 
-        ctk.CTkButton(
+        ArabicCTkButton(
             btn_frame,
-            text="Annuler",
+            text=prepare_for_display("Annuler"),
             command=self.destroy,
             height=40,
             corner_radius=8,
@@ -269,9 +272,9 @@ class GoalDialog(ctk.CTkToplevel):
             font=ctk.CTkFont(size=12, weight="bold")
         ).grid(row=1, column=0, sticky="ew", padx=(0, 8))
 
-        ctk.CTkButton(
+        ArabicCTkButton(
             btn_frame,
-            text="💾 Enregistrer",
+            text=prepare_for_display("Enregistrer"),
             command=self._save,
             height=40,
             corner_radius=8,
@@ -288,7 +291,6 @@ class GoalDialog(ctk.CTkToplevel):
             self.color_btn.configure(fg_color=self.selected_color, hover_color=self.selected_color)
 
     def _choose_image(self):
-        """Ouvre un sélecteur de fichier pour choisir une image."""
         filetypes = [
             ("Images", "*.png *.jpg *.jpeg *.gif *.bmp"),
             ("PNG", "*.png"),
@@ -301,7 +303,6 @@ class GoalDialog(ctk.CTkToplevel):
             self._display_image(path)
 
     def _remove_image(self):
-        """Supprime l'image sélectionnée."""
         self.temp_image_path = None
         self.selected_image_path = None
         for widget in self.image_frame.winfo_children():
@@ -315,7 +316,6 @@ class GoalDialog(ctk.CTkToplevel):
         self.image_label.pack(expand=True)
 
     def _display_image(self, path: str):
-        """Affiche l'image dans le frame."""
         try:
             for widget in self.image_frame.winfo_children():
                 widget.destroy()
@@ -343,8 +343,8 @@ class GoalDialog(ctk.CTkToplevel):
         if not self.goal:
             return
 
-        self.title_entry.insert(0, self.goal.title)
-        self.desc_text.insert("0.0", self.goal.description)
+        self.title_entry.set_value(self.goal.title)
+        self.desc_entry.set_value(self.goal.description)
         if self.goal.target_date:
             self.target_entry.insert(0, self.goal.target_date.strftime("%Y-%m-%d"))
         self.priority_var.set(self.goal.priority)
@@ -361,7 +361,7 @@ class GoalDialog(ctk.CTkToplevel):
             messagebox.showerror("Erreur", "Le titre est obligatoire")
             return
 
-        description = self.desc_text.get("0.0", "end").strip()
+        description = self.desc_entry.get().strip()
         target_date = self.target_entry.get().strip() or None
         priority = self.priority_var.get()
         color = self.selected_color
@@ -409,11 +409,11 @@ class GoalDialog(ctk.CTkToplevel):
 
 
 # ═══════════════════════════════════════════════════
-# TASK DIALOG - CLASSE SÉPARÉE
+# TASK DIALOG - CLASSE SEPAREE
 # ═══════════════════════════════════════════════════
 
 class TaskDialog(ctk.CTkToplevel):
-    """Dialogue Task."""
+    """Dialogue Task avec clavier arabe."""
 
     def __init__(
         self,
@@ -431,7 +431,7 @@ class TaskDialog(ctk.CTkToplevel):
         self.on_save = on_save
         self.is_edit = task is not None
 
-        self.title("Modifier la tâche" if self.is_edit else "Nouvelle tâche")
+        self.title("Modifier la tache" if self.is_edit else "Nouvelle tache")
         self.geometry("480x400")
         self.resizable(False, False)
         self.transient(master)
@@ -451,52 +451,48 @@ class TaskDialog(ctk.CTkToplevel):
         scroll_frame = ctk.CTkScrollableFrame(self, fg_color="#FFFFFF", corner_radius=0)
         scroll_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=(20, 10))
 
-        ctk.CTkLabel(
+        ArabicCTkLabel(
             scroll_frame,
-            text="Modifier la tâche" if self.is_edit else "Nouvelle tâche",
+            text=prepare_for_display("Modifier la tache" if self.is_edit else "Nouvelle tache"),
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color="#1E293B"
         ).pack(anchor="w", pady=(0, 20))
 
-        ctk.CTkLabel(
+        ArabicCTkLabel(
             scroll_frame,
-            text="Nom de la tâche *",
+            text=prepare_for_display("Nom de la tache *"),
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color="#475569"
         ).pack(anchor="w", pady=(0, 5))
 
-        self.name_entry = ctk.CTkEntry(
+        self.name_entry = ArabicKeyboardEntry(
             scroll_frame,
-            placeholder_text="Nom...",
             height=40,
-            corner_radius=8,
-            border_width=1,
-            border_color="#E2E8F0",
+            font=ctk.CTkFont(size=12),
             fg_color="#F8FAFC",
+            border_color="#E2E8F0",
             text_color="#1E293B",
-            font=ctk.CTkFont(size=12)
+            placeholder_text="Nom..."
         )
         self.name_entry.pack(fill="x", pady=(0, 15))
 
-        ctk.CTkLabel(
+        ArabicCTkLabel(
             scroll_frame,
-            text="Description",
+            text=prepare_for_display("Description"),
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color="#475569"
         ).pack(anchor="w", pady=(0, 5))
 
-        self.desc_text = ctk.CTkTextbox(
+        self.desc_entry = ArabicKeyboardEntry(
             scroll_frame,
-            height=60,
-            wrap="word",
-            corner_radius=8,
-            border_width=1,
-            border_color="#E2E8F0",
+            height=40,
+            font=ctk.CTkFont(size=12),
             fg_color="#F8FAFC",
+            border_color="#E2E8F0",
             text_color="#1E293B",
-            font=ctk.CTkFont(size=12)
+            placeholder_text="Description..."
         )
-        self.desc_text.pack(fill="x", pady=(0, 15))
+        self.desc_entry.pack(fill="x", pady=(0, 15))
 
         if self.is_edit:
             ctk.CTkLabel(
@@ -506,10 +502,10 @@ class TaskDialog(ctk.CTkToplevel):
                 text_color="#475569"
             ).pack(anchor="w", pady=(0, 5))
 
-            self.status_var = ctk.StringVar(value=self.task.status if self.task else "À faire")
+            self.status_var = ctk.StringVar(value=self.task.status if self.task else "A faire")
             ctk.CTkOptionMenu(
                 scroll_frame,
-                values=["À faire", "En cours", "Terminée"],
+                values=["A faire", "En cours", "Terminee"],
                 variable=self.status_var,
                 height=40,
                 corner_radius=8,
@@ -531,9 +527,9 @@ class TaskDialog(ctk.CTkToplevel):
             row=0, column=0, columnspan=2, sticky="ew", pady=(0, 15)
         )
 
-        ctk.CTkButton(
+        ArabicCTkButton(
             btn_frame,
-            text="Annuler",
+            text=prepare_for_display("Annuler"),
             command=self.destroy,
             height=40,
             corner_radius=8,
@@ -543,9 +539,9 @@ class TaskDialog(ctk.CTkToplevel):
             font=ctk.CTkFont(size=12, weight="bold")
         ).grid(row=1, column=0, sticky="ew", padx=(0, 8))
 
-        ctk.CTkButton(
+        ArabicCTkButton(
             btn_frame,
-            text="💾 Enregistrer",
+            text=prepare_for_display("Enregistrer"),
             command=self._save,
             height=40,
             corner_radius=8,
@@ -558,8 +554,8 @@ class TaskDialog(ctk.CTkToplevel):
     def _fill_form(self):
         if not self.task:
             return
-        self.name_entry.insert(0, self.task.name)
-        self.desc_text.insert("0.0", self.task.description)
+        self.name_entry.set_value(self.task.name)
+        self.desc_entry.set_value(self.task.description)
 
     def _save(self):
         name = self.name_entry.get().strip()
@@ -567,7 +563,7 @@ class TaskDialog(ctk.CTkToplevel):
             messagebox.showerror("Erreur", "Le nom est obligatoire")
             return
 
-        description = self.desc_text.get("0.0", "end").strip()
+        description = self.desc_entry.get().strip()
 
         try:
             if self.is_edit:
