@@ -37,7 +37,7 @@ echo      OK
 
 :: -- Build avec PyInstaller --
 echo [5/6] Build PyInstaller...
-python -m PyInstaller --name=Goalift --windowed --onefile --add-data "assets;assets" --hidden-import=customtkinter --hidden-import=PIL --clean main.py
+python -m PyInstaller --name=Goalift  --onefile --add-data "assets;assets" --hidden-import=customtkinter --hidden-import=PIL --clean main.py
 
 if errorlevel 1 (
     echo      ERREUR lors du build

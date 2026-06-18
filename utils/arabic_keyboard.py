@@ -479,7 +479,6 @@ class ArabicKeyboardTextbox(ctk.CTkFrame):
     # ─── API publique — identique à CTkTextbox ───
 
     def get(self, start="0.0", end="end"):
-        """Retourne le texte brut."""
         if self._placeholder_shown:
             return ""
         return self.textbox.get(start, end).strip()
@@ -492,12 +491,13 @@ class ArabicKeyboardTextbox(ctk.CTkFrame):
             self._placeholder_shown = False
         self.textbox.insert(index, text)
 
-    def delete(self, start, end=None):
-        """Supprime le texte entre start et end."""
-        self.textbox.delete(start, end if end else start)
+    def delete(self, start=None, end=None):
+        if start is None or start == "0":
+            self.textbox.delete("0.0", "end")
+        else:
+            self.textbox.delete(start, end if end else "end")
 
     def set_value(self, text):
-        """Remplace tout le contenu."""
         self.textbox.delete("0.0", "end")
         if text:
             self.textbox.insert("0.0", text)
@@ -507,6 +507,8 @@ class ArabicKeyboardTextbox(ctk.CTkFrame):
             self.textbox.insert("0.0", self._placeholder_text)
             self.textbox.configure(text_color="#94A3B8")
             self._placeholder_shown = True
+        else:
+            self._placeholder_shown = False
 
     def configure(self, **kwargs):
         if "placeholder_text" in kwargs:

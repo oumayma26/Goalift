@@ -18,6 +18,7 @@ from utils.arabic_text import (
     ArabicCTkButton,
 )
 from utils.arabic_keyboard import ArabicKeyboardEntry
+from utils.arabic_keyboard import ArabicKeyboardTextbox
 
 
 class GoalDialog(ctk.CTkToplevel):
@@ -76,7 +77,7 @@ class GoalDialog(ctk.CTkToplevel):
             text_color="#475569"
         ).pack(anchor="w", pady=(0, 5))
 
-        self.title_entry = ArabicKeyboardEntry(
+        self.title_entry = ArabicKeyboardTextbox(
             scroll_frame,
             height=40,
             font=ctk.CTkFont(size=12),
@@ -95,7 +96,7 @@ class GoalDialog(ctk.CTkToplevel):
             text_color="#475569"
         ).pack(anchor="w", pady=(0, 5))
 
-        self.desc_entry = ArabicKeyboardEntry(
+        self.desc_entry = ArabicKeyboardTextbox(
             scroll_frame,
             height=40,
             font=ctk.CTkFont(size=12),
@@ -461,11 +462,11 @@ class TaskDialog(ctk.CTkToplevel):
         ArabicCTkLabel(
             scroll_frame,
             text=prepare_for_display("Nom de la tache *"),
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(size=12, weight="bold"),
             text_color="#475569"
         ).pack(anchor="w", pady=(0, 5))
 
-        self.name_entry = ArabicKeyboardEntry(
+        self.name_entry = ArabicKeyboardTextbox(
             scroll_frame,
             height=40,
             font=ctk.CTkFont(size=12),
@@ -476,6 +477,7 @@ class TaskDialog(ctk.CTkToplevel):
         )
         self.name_entry.pack(fill="x", pady=(0, 15))
 
+
         ArabicCTkLabel(
             scroll_frame,
             text=prepare_for_display("Description"),
@@ -483,7 +485,7 @@ class TaskDialog(ctk.CTkToplevel):
             text_color="#475569"
         ).pack(anchor="w", pady=(0, 5))
 
-        self.desc_entry = ArabicKeyboardEntry(
+        self.desc_entry = ArabicKeyboardTextbox(
             scroll_frame,
             height=40,
             font=ctk.CTkFont(size=12),

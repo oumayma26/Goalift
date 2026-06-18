@@ -20,7 +20,7 @@ from utils.arabic_text import (
 
 from database.database import DatabaseManager
 from services.habit_service import HabitService
-from utils.arabic_keyboard import ArabicKeyboardEntry, ArabicKeyboardTextbox
+from utils.arabic_keyboard import ArabicKeyboardTextbox
 
 
 class HabitDialog(ctk.CTkToplevel):
@@ -80,14 +80,17 @@ class HabitDialog(ctk.CTkToplevel):
             text_color="#1E293B"
         ).pack(pady=(15, 10), padx=20, anchor="w")
 
-        # Nom — ArabicKeyboardEntry (single line)
+        # ═══════════════════════════════════════════════════
+        # NOM — ArabicKeyboardTextbox (single line)
+        # ═══════════════════════════════════════════════════
         ArabicCTkLabel(
             content, text=prepare_for_display("Nom:"),
             font=ctk.CTkFont(size=12, weight="bold"), text_color="#475569"
         ).pack(padx=20, anchor="w", pady=(10, 5))
+
         self.name_entry = ArabicKeyboardTextbox(
             content,
-            height=40,           # Hauteur single line
+            height=40,
             font=ctk.CTkFont(size=13),
             fg_color="#F8FAFC",
             border_color="#E2E8F0",
@@ -96,11 +99,14 @@ class HabitDialog(ctk.CTkToplevel):
         )
         self.name_entry.pack(fill="x", padx=20, pady=5)
 
-        # Description — CORRECTION : ArabicKeyboardTextbox (multi-lignes)
+        # ═══════════════════════════════════════════════════
+        # DESCRIPTION — ArabicKeyboardTextbox (multi-lignes)
+        # ═══════════════════════════════════════════════════
         ArabicCTkLabel(
             content, text=prepare_for_display("Description (optionnel):"),
             font=ctk.CTkFont(size=12, weight="bold"), text_color="#475569"
         ).pack(padx=20, anchor="w", pady=(10, 5))
+
         self.desc_entry = ArabicKeyboardTextbox(
             content,
             height=80,
@@ -265,11 +271,8 @@ class HabitDialog(ctk.CTkToplevel):
         if not habit:
             return
 
-        # Nom — ArabicKeyboardEntry
-        self.name_entry.delete(0, "end")
-        self.name_entry.insert(0, habit.get("title", ""))
-
-        # Description — CORRECTION : ArabicKeyboardTextbox
+        # CORRECTION : Utiliser set_value() pour les deux (même API)
+        self.name_entry.set_value(habit.get("title", ""))
         self.desc_entry.set_value(habit.get("description", ""))
 
         self.freq_var.set(habit.get("frequency", "daily"))
@@ -303,11 +306,11 @@ class HabitDialog(ctk.CTkToplevel):
                             break
 
     def _on_save(self) -> None:
+        # CORRECTION : .get() sans arguments pour ArabicKeyboardTextbox
         title = self.name_entry.get().strip()
         if not title:
             return
 
-        # CORRECTION : ArabicKeyboardTextbox.get() retourne directement le texte
         desc = self.desc_entry.get().strip()
         freq = self.freq_var.get()
 
