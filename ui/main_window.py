@@ -1,6 +1,6 @@
 """
 ui/main_window.py
-Fenêtre principale avec Vision Board intégré.
+Fenetre principale avec Vision Board et Coach IA integres.
 """
 
 import os
@@ -13,11 +13,12 @@ from ui.dashboard_view import DashboardView
 from ui.goals_grid_view import GoalsGridView
 from ui.goal_detail_view import GoalDetailView
 from ui.dialogs import GoalDialog
+from ui.ai_coach_view import AICoachView
 
 
 class MainWindow(ctk.CTk):
     """
-    Fenêtre principale - Design clair, épuré et professionnel.
+    Fenetre principale - Design clair, epure et professionnel.
     """
 
     def __init__(self) -> None:
@@ -93,7 +94,20 @@ class MainWindow(ctk.CTk):
         )
         self.habits_btn.pack(fill="x", pady=3)
 
-        # Séparateur
+        # ═══════════════════════════════════════════════════
+        # BOUTON COACH IA
+        # ═══════════════════════════════════════════════════
+        self.ai_btn = self._create_nav_button(
+            nav_frame, "🤖 Coach IA", self._show_ai_coach, active=False
+        )
+        self.ai_btn.pack(fill="x", pady=3)
+
+        self.wird_btn = self._create_nav_button(
+            nav_frame, "📿 Wird", self._show_wird_view, active=False
+        )
+        self.wird_btn.pack(fill="x", pady=3)
+
+        # Separateur
         ctk.CTkFrame(self.left_frame, height=1, fg_color="#E2E8F0").grid(
             row=2, column=0, sticky="ew", padx=20, pady=15
         )
@@ -123,14 +137,14 @@ class MainWindow(ctk.CTk):
             height=40
         ).pack(fill="x", padx=10, pady=5)
 
-        # Filtres statut/priorité
+        # Filtres statut/priorite
         filters_row = ctk.CTkFrame(self.left_frame, fg_color="transparent")
         filters_row.grid(row=5, column=0, padx=15, pady=5, sticky="ew")
         filters_row.grid_columnconfigure((0, 1), weight=1)
 
         self.status_filter = ctk.CTkOptionMenu(
             filters_row,
-            values=["Tous", "Non commencé", "En cours", "Terminé"],
+            values=["Tous", "Non commence", "En cours", "Termine"],
             command=lambda _: self._on_filter_changed(),
             width=130,
             fg_color="#F1F5F9",
@@ -158,10 +172,10 @@ class MainWindow(ctk.CTk):
         self.priority_filter.set("Toutes")
         self.priority_filter.grid(row=0, column=1, padx=(5, 0), sticky="ew")
 
-        # Toggle "Voir les terminés"
+        # Toggle "Voir les termines"
         self.toggle_completed_btn = ctk.CTkButton(
             self.left_frame,
-            text="👁️ Voir les terminés",
+            text="👁️ Voir les termines",
             command=self._toggle_completed_filter,
             height=35,
             corner_radius=8,
@@ -195,7 +209,7 @@ class MainWindow(ctk.CTk):
         self.new_goal_btn.grid(row=9, column=0, padx=15, pady=(5, 20), sticky="ew")
 
     def _create_nav_button(self, parent, text, command, active=False):
-        """Crée un bouton de navigation stylisé."""
+        """Cree un bouton de navigation stylise."""
         colors = {
             "active": {"fg": "#EFF6FF", "text": "#3B82F6", "hover": "#EFF6FF"},
             "inactive": {"fg": "transparent", "text": "#64748B", "hover": "#F1F5F9"}
@@ -276,8 +290,23 @@ class MainWindow(ctk.CTk):
         )
         self.current_view.grid(row=0, column=0, sticky="nsew")
 
+    # ═══════════════════════════════════════════════════
+    # COACH IA
+    # ═══════════════════════════════════════════════════
+
+    def _show_ai_coach(self) -> None:
+        """Affiche le Coach IA dans le panneau droit."""
+        self._clear_right_panel()
+        self._set_nav_active("ai")
+
+        self.current_view = AICoachView(
+            self.right_frame,
+            db_manager=self.db
+        )
+        self.current_view.grid(row=0, column=0, sticky="nsew")
+
     def _get_filtered_goals(self) -> list:
-        """Récupère les goals filtrés et triés par progression."""
+        """Recupere les goals filtres et tries par progression."""
         status = self.status_filter.get()
         priority = self.priority_filter.get()
         search = self.search_var.get() or None
@@ -288,11 +317,11 @@ class MainWindow(ctk.CTk):
             priority = None
 
         if self.show_completed:
-            goals = self.service.list_goals(status="Terminé")
+            goals = self.service.list_goals(status="Termine")
         else:
-            goals = self.service.list_goals(exclude_status="Terminé")
+            goals = self.service.list_goals(exclude_status="Termine")
 
-        if status and status != "Terminé":
+        if status and status != "Termine":
             goals = [g for g in goals if g.status == status]
         if priority:
             goals = [g for g in goals if g.priority == priority]
@@ -309,12 +338,12 @@ class MainWindow(ctk.CTk):
         return [g for g, _ in goals_with_progress]
 
     def _on_goal_selected(self, goal_id: int) -> None:
-        """Callback quand un goal est sélectionné."""
+        """Callback quand un goal est selectionne."""
         self.selected_goal_id = goal_id
         self._show_goal_details(goal_id)
 
     def _show_goal_details(self, goal_id: int) -> None:
-        """Affiche les détails d'un goal."""
+        """Affiche les details d'un goal."""
         goal = self.service.get_goal(goal_id)
         if not goal:
             return
@@ -330,19 +359,19 @@ class MainWindow(ctk.CTk):
         self.current_view.grid(row=0, column=0, sticky="nsew")
 
     def _toggle_completed_filter(self) -> None:
-        """Bascule entre goals non terminés et terminés."""
+        """Bascule entre goals non termines et termines."""
         self.show_completed = not self.show_completed
 
         if self.show_completed:
             self.toggle_completed_btn.configure(
-                text="👁️ Voir les non terminés",
+                text="👁️ Voir les non termines",
                 fg_color="#D1FAE5",
                 hover_color="#A7F3D0",
                 text_color="#059669"
             )
         else:
             self.toggle_completed_btn.configure(
-                text="👁️ Voir les terminés",
+                text="👁️ Voir les termines",
                 fg_color="#F1F5F9",
                 hover_color="#E2E8F0",
                 text_color="#475569"
@@ -351,13 +380,13 @@ class MainWindow(ctk.CTk):
         self._show_goals_view()
 
     def _on_filter_changed(self) -> None:
-        """Appelé quand un filtre change."""
+        """Appele quand un filtre change."""
         self._refresh_sidebar_only()
         if isinstance(self.current_view, GoalsGridView):
             self._refresh_grid_only()
 
     def _on_goal_updated(self) -> None:
-        """Appelé quand un goal est modifié."""
+        """Appele quand un goal est modifie."""
         self._refresh_sidebar_only()
         if isinstance(self.current_view, GoalsGridView):
             self._refresh_grid_only()
@@ -377,11 +406,11 @@ class MainWindow(ctk.CTk):
             priority = None
 
         if self.show_completed:
-            goals = self.service.list_goals(status="Terminé")
+            goals = self.service.list_goals(status="Termine")
         else:
-            goals = self.service.list_goals(exclude_status="Terminé")
+            goals = self.service.list_goals(exclude_status="Termine")
 
-        if status and status != "Terminé":
+        if status and status != "Termine":
             goals = [g for g in goals if g.status == status]
         if priority:
             goals = [g for g in goals if g.priority == priority]
@@ -464,12 +493,14 @@ class MainWindow(ctk.CTk):
         bar_fill.pack(side="left", fill="y")
 
     def _set_nav_active(self, view: str) -> None:
-        """Met à jour l'état des boutons de navigation."""
+        """Met a jour l'etat des boutons de navigation."""
         buttons = {
             "dashboard": self.dashboard_btn,
             "goals": self.goals_btn,
             "vision": self.vision_btn,
-            "habits": self.habits_btn
+            "habits": self.habits_btn,
+            "ai": self.ai_btn,
+            "wird": self.wird_btn
         }
 
         for key, btn in buttons.items():
@@ -501,3 +532,31 @@ class MainWindow(ctk.CTk):
             db=self.db
         )
         self.current_view.grid(row=0, column=0, sticky="nsew")
+
+    def _show_wird_view(self):
+        self._clear_right_panel()
+        self._set_nav_active("wird")
+        
+        from ui.wird_view import WirdListView
+        
+        def on_start(wird_id):
+            self._clear_right_panel()
+            from ui.wird_view import WirdSessionView
+            session = WirdSessionView(
+                self.right_frame,
+                db=self.db,
+                wird_id=wird_id,
+                on_finish=self._on_wird_finished
+            )
+            session.grid(row=0, column=0, sticky="nsew")
+        
+        self.current_view = WirdListView(
+            self.right_frame,
+            db=self.db,
+            on_start_session=on_start
+        )
+        self.current_view.grid(row=0, column=0, sticky="nsew")
+
+    def _on_wird_finished(self, stats):
+        # Retour à la liste avec animation de succès
+        self._show_wird_view()

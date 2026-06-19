@@ -188,6 +188,84 @@ class DatabaseManager:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_habits_archived ON habits(archived_at)
             """)
+
+
+            # ═══════════════════════════════════════════════════
+            # WIRD (Programmes spirituels personnalisés)
+            # ═══════════════════════════════════════════════════
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS wirds (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    icon TEXT DEFAULT '📿',
+                    color TEXT DEFAULT '#3B82F6',
+                    schedule_type TEXT DEFAULT 'daily'
+                        CHECK(schedule_type IN ('daily', 'fajr', 'dhuhr', 'asr', 'maghrib', 'isha', 'custom')),
+                    target_days TEXT,
+                    is_template INTEGER DEFAULT 0,
+                    is_active INTEGER DEFAULT 1,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    archived_at TEXT
+                )
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS wird_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    wird_id INTEGER NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    icon TEXT DEFAULT '✨',
+                    target_count INTEGER DEFAULT 1,
+                    unit TEXT DEFAULT 'fois',
+                    duration_seconds INTEGER,
+                    order_index INTEGER DEFAULT 0,
+                    is_optional INTEGER DEFAULT 0,
+                    FOREIGN KEY (wird_id) REFERENCES wirds(id) ON DELETE CASCADE
+                )
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS wird_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    wird_id INTEGER NOT NULL,
+                    session_date TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    completed_at TEXT,
+                    total_duration_seconds INTEGER DEFAULT 0,
+                    items_completed INTEGER DEFAULT 0,
+                    items_total INTEGER DEFAULT 0,
+                    status TEXT DEFAULT 'in_progress'
+                        CHECK(status IN ('in_progress', 'completed', 'abandoned')),
+                    mood_after INTEGER,
+                    note TEXT,
+                    FOREIGN KEY (wird_id) REFERENCES wirds(id) ON DELETE CASCADE
+                )
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS wird_session_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL,
+                    item_id INTEGER NOT NULL,
+                    completed_at TEXT,
+                    actual_count INTEGER DEFAULT 1,
+                    duration_seconds INTEGER,
+                    status TEXT DEFAULT 'completed'
+                        CHECK(status IN ('completed', 'skipped', 'partial')),
+                    note TEXT,
+                    FOREIGN KEY (session_id) REFERENCES wird_sessions(id) ON DELETE CASCADE,
+                    FOREIGN KEY (item_id) REFERENCES wird_items(id) ON DELETE CASCADE
+                )
+            """)
+
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_wirds_active ON wirds(is_active, archived_at)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_wird_items_wird ON wird_items(wird_id, order_index)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_wird_sessions_date ON wird_sessions(wird_id, session_date)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_wird_session_logs ON wird_session_logs(session_id, item_id)")
+
             print(f"✅ Base de données initialisée : {self.db_path}")
 
     def create_goal(
@@ -545,7 +623,7 @@ class DatabaseManager:
         title: str,
         description: Optional[str] = None,
         goal_id: Optional[int] = None,
-        task_id: Optional[int] = None,  # NOUVEAU
+        task_id: Optional[int] = None,
         frequency: str = "daily",
         target_days: Optional[str] = None,
         color: str = "#3B82F6",
@@ -597,7 +675,7 @@ class DatabaseManager:
         title: Optional[str] = None,
         description: Optional[str] = None,
         goal_id: Optional[int] = None,
-        task_id: Optional[int] = None,  # NOUVEAU
+        task_id: Optional[int] = None,
         frequency: Optional[str] = None,
         target_days: Optional[str] = None,
         color: Optional[str] = None,
@@ -756,3 +834,392 @@ class DatabaseManager:
                 "total_logged": done + missed + partial,
                 "rate": round(done / total_days * 100, 1) if total_days else 0
             }
+        
+    # ═══════════════════════════════════════════════════
+    # WIRD METHODS
+    # ═══════════════════════════════════════════════════
+
+    def create_wird(
+        self,
+        title: str,
+        description: Optional[str] = None,
+        icon: str = "📿",
+        color: str = "#3B82F6",
+        schedule_type: str = "daily",
+        target_days: Optional[str] = None,
+        is_template: bool = False
+    ) -> int:
+        """Crée un nouveau Wird (programme spirituel)."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO wirds (title, description, icon, color, schedule_type, target_days, is_template)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (title, description, icon, color, schedule_type, target_days, 1 if is_template else 0))
+            return cursor.lastrowid
+
+    def add_wird_item(
+        self,
+        wird_id: int,
+        title: str,
+        description: Optional[str] = None,
+        icon: str = "✨",
+        target_count: int = 1,
+        unit: str = "fois",
+        duration_seconds: Optional[int] = None,
+        order_index: int = 0,
+        is_optional: bool = False
+    ) -> int:
+        """Ajoute un item à un Wird."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO wird_items (wird_id, title, description, icon, target_count, unit, duration_seconds, order_index, is_optional)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (wird_id, title, description, icon, target_count, unit, duration_seconds, order_index, 1 if is_optional else 0))
+            return cursor.lastrowid
+
+    def get_wird_by_id(self, wird_id: int) -> Optional[sqlite3.Row]:
+        """Récupère un Wird avec ses items."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM wirds WHERE id = ?", (wird_id,))
+            return cursor.fetchone()
+
+    def get_wird_items(self, wird_id: int) -> list[sqlite3.Row]:
+        """Récupère tous les items d'un Wird, ordonnés."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM wird_items 
+                WHERE wird_id = ? 
+                ORDER BY order_index ASC
+            """, (wird_id,))
+            return cursor.fetchall()
+
+    def get_all_wirds(self, include_templates: bool = False, include_archived: bool = False) -> list[sqlite3.Row]:
+        """Récupère tous les Wirds actifs."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            query = "SELECT * FROM wirds WHERE 1=1"
+            params = []
+            
+            if not include_templates:
+                query += " AND is_template = 0"
+            if not include_archived:
+                query += " AND archived_at IS NULL"
+                
+            query += " ORDER BY is_template DESC, created_at DESC"
+            cursor.execute(query, params)
+            return cursor.fetchall()
+
+    def update_wird(self, wird_id: int, **kwargs) -> bool:
+        """Met à jour un Wird."""
+        allowed = ['title', 'description', 'icon', 'color', 'schedule_type', 'target_days', 'is_active']
+        updates = []
+        params = []
+        
+        for key, value in kwargs.items():
+            if key in allowed:
+                updates.append(f"{key} = ?")
+                params.append(value)
+        
+        if not updates:
+            return False
+            
+        params.append(wird_id)
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f"UPDATE wirds SET {', '.join(updates)} WHERE id = ?", params)
+            return cursor.rowcount > 0
+
+    def delete_wird(self, wird_id: int) -> bool:
+        """Supprime un Wird (cascade sur items et sessions)."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM wirds WHERE id = ?", (wird_id,))
+            return cursor.rowcount > 0
+
+    def archive_wird(self, wird_id: int) -> bool:
+        """Archive un Wird."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            now = datetime.now().isoformat()
+            cursor.execute("UPDATE wirds SET archived_at = ? WHERE id = ?", (now, wird_id))
+            return cursor.rowcount > 0
+
+    # ═══════════════════════════════════════════════════
+    # WIRD SESSION METHODS
+    # ═══════════════════════════════════════════════════
+
+    def start_wird_session(self, wird_id: int) -> int:
+        """Démarre une nouvelle session de Wird."""
+        now = datetime.now()
+        today = now.strftime("%Y-%m-%d")
+        
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # Vérifier si session déjà en cours aujourd'hui
+            cursor.execute("""
+                SELECT id FROM wird_sessions 
+                WHERE wird_id = ? AND session_date = ? AND status = 'in_progress'
+            """, (wird_id, today))
+            existing = cursor.fetchone()
+            if existing:
+                return existing["id"]
+                
+            # Compter les items
+            cursor.execute("SELECT COUNT(*) FROM wird_items WHERE wird_id = ?", (wird_id,))
+            total_items = cursor.fetchone()[0]
+            
+            cursor.execute("""
+                INSERT INTO wird_sessions (wird_id, session_date, started_at, items_total, status)
+                VALUES (?, ?, ?, ?, 'in_progress')
+            """, (wird_id, today, now.isoformat(), total_items))
+            return cursor.lastrowid
+
+    def complete_wird_item(self, session_id: int, item_id: int, 
+                        actual_count: int = 1, duration_seconds: Optional[int] = None,
+                        note: Optional[str] = None) -> int:
+        """Marque un item comme complété dans la session."""
+        now = datetime.now().isoformat()
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO wird_session_logs (session_id, item_id, completed_at, actual_count, duration_seconds, status, note)
+                VALUES (?, ?, ?, ?, ?, 'completed', ?)
+            """, (session_id, item_id, now, actual_count, duration_seconds, note))
+            
+            # Mettre à jour le compteur de la session
+            cursor.execute("""
+                UPDATE wird_sessions 
+                SET items_completed = items_completed + 1
+                WHERE id = ?
+            """, (session_id,))
+            
+            return cursor.lastrowid
+
+    def skip_wird_item(self, session_id: int, item_id: int, note: Optional[str] = None) -> None:
+        """Marque un item comme sauté."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO wird_session_logs (session_id, item_id, completed_at, status, note)
+                VALUES (?, ?, ?, 'skipped', ?)
+            """, (session_id, item_id, datetime.now().isoformat(), note))
+
+    def complete_wird_session(self, session_id: int, mood_after: Optional[int] = None, 
+                            note: Optional[str] = None) -> bool:
+        """Finalise une session."""
+        now = datetime.now()
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Calculer la durée totale
+            cursor.execute("SELECT started_at FROM wird_sessions WHERE id = ?", (session_id,))
+            row = cursor.fetchone()
+            if row:
+                started = datetime.fromisoformat(row["started_at"])
+                duration = int((now - started).total_seconds())
+                
+                cursor.execute("""
+                    UPDATE wird_sessions 
+                    SET completed_at = ?, total_duration_seconds = ?, status = 'completed', mood_after = ?, note = ?
+                    WHERE id = ?
+                """, (now.isoformat(), duration, mood_after, note, session_id))
+                return cursor.rowcount > 0
+            return False
+
+    def get_wird_session_progress(self, session_id: int) -> dict:
+        """Récupère la progression d'une session en cours."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT ws.*, w.title as wird_title, w.color, w.icon
+                FROM wird_sessions ws
+                JOIN wirds w ON ws.wird_id = w.id
+                WHERE ws.id = ?
+            """, (session_id,))
+            session = cursor.fetchone()
+            
+            if not session:
+                return {}
+                
+            cursor.execute("""
+                SELECT wi.*, wsl.status as log_status, wsl.actual_count, wsl.note as log_note
+                FROM wird_items wi
+                LEFT JOIN wird_session_logs wsl ON wsl.item_id = wi.id AND wsl.session_id = ?
+                WHERE wi.wird_id = ?
+                ORDER BY wi.order_index
+            """, (session_id, session["wird_id"]))
+            items = cursor.fetchall()
+            
+            completed = sum(1 for i in items if i["log_status"] == "completed")
+            skipped = sum(1 for i in items if i["log_status"] == "skipped")
+            
+            return {
+                "session": dict(session),
+                "items": [dict(i) for i in items],
+                "completed_count": completed,
+                "skipped_count": skipped,
+                "remaining_count": session["items_total"] - completed - skipped,
+                "percentage": round((completed / session["items_total"]) * 100, 1) if session["items_total"] > 0 else 0
+            }
+
+    def get_wird_stats(self, wird_id: int, days: int = 30) -> dict:
+        """Statistiques d'un Wird sur N jours."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+            
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as total_sessions,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_sessions,
+                    AVG(total_duration_seconds) as avg_duration,
+                    AVG(mood_after) as avg_mood
+                FROM wird_sessions
+                WHERE wird_id = ? AND session_date >= ?
+            """, (wird_id, start_date))
+            stats = cursor.fetchone()
+            
+            # Streak actuel
+            cursor.execute("""
+                SELECT session_date, status 
+                FROM wird_sessions 
+                WHERE wird_id = ? 
+                ORDER BY session_date DESC
+            """, (wird_id,))
+            sessions = cursor.fetchall()
+            
+            streak = 0
+            for s in sessions:
+                if s["status"] == "completed":
+                    streak += 1
+                else:
+                    break
+                    
+            return {
+                "total_sessions": stats["total_sessions"] or 0,
+                "completed_sessions": stats["completed_sessions"] or 0,
+                "completion_rate": round((stats["completed_sessions"] / stats["total_sessions"]) * 100, 1) if stats["total_sessions"] else 0,
+                "avg_duration_seconds": round(stats["avg_duration"] or 0),
+                "avg_mood": round(stats["avg_mood"] or 0, 1),
+                "current_streak": streak
+            }
+
+    def get_today_sessions(self) -> list[sqlite3.Row]:
+        """Récupère toutes les sessions du jour."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT ws.*, w.title, w.icon, w.color
+                FROM wird_sessions ws
+                JOIN wirds w ON ws.wird_id = w.id
+                WHERE ws.session_date = ?
+                ORDER BY ws.started_at DESC
+            """, (today,))
+            return cursor.fetchall()
+
+    def seed_wird_templates(self) -> None:
+        """Crée les templates de Wird par défaut."""
+        templates = [
+            {
+                "title": "Wird du Matin (Adhkar Sabah)",
+                "icon": "☀️",
+                "color": "#F59E0B",
+                "schedule_type": "daily",
+                "items": [
+                    ("Ayat al-Kursi", "1x", 1, "fois", 60, "📖"),
+                    ("Surah Al-Ikhlas", "3x", 3, "fois", 30, "📖"),
+                    ("Surah Al-Falaq", "3x", 3, "fois", 30, "📖"),
+                    ("Surah An-Nas", "3x", 3, "fois", 30, "📖"),
+                    ("SubhanAllah", "33x", 33, "fois", 60, "🌟"),
+                    ("Alhamdulillah", "33x", 33, "fois", 60, "🌟"),
+                    ("Allahu Akbar", "34x", 34, "fois", 60, "🌟"),
+                    ("La ilaha illallah", "1x", 1, "fois", 15, "☝️"),
+                    ("Hasbunallahu wa ni'mal wakeel", "7x", 7, "fois", 30, "🛡️"),
+                ]
+            },
+            {
+                "title": "Wird du Soir (Adhkar Masaa)",
+                "icon": "🌙",
+                "color": "#6366F1",
+                "schedule_type": "daily",
+                "items": [
+                    ("Ayat al-Kursi", "1x", 1, "fois", 60, "📖"),
+                    ("Surah Al-Ikhlas", "3x", 3, "fois", 30, "📖"),
+                    ("Surah Al-Falaq", "3x", 3, "fois", 30, "📖"),
+                    ("Surah An-Nas", "3x", 3, "fois", 30, "📖"),
+                    ("Bismillahilladhi la yadurru...", "3x", 3, "fois", 30, "🛡️"),
+                    ("Raditu billahi rabba...", "3x", 3, "fois", 30, "❤️"),
+                    ("SubhanAllah wa bihamdihi", "100x", 100, "fois", 120, "🌟"),
+                ]
+            },
+            {
+                "title": "Wird Post-Prière",
+                "icon": "🤲",
+                "color": "#10B981",
+                "schedule_type": "daily",
+                "items": [
+                    ("Astaghfirullah", "3x", 3, "fois", 15, "🤍"),
+                    ("Allahumma anta as-salam...", "1x", 1, "fois", 15, "🕊️"),
+                    ("SubhanAllah", "33x", 33, "fois", 45, "🌟"),
+                    ("Alhamdulillah", "33x", 33, "fois", 45, "🌟"),
+                    ("Allahu Akbar", "34x", 34, "fois", 45, "🌟"),
+                    ("La ilaha illallah wahdahu...", "1x", 1, "fois", 15, "☝️"),
+                ]
+            },
+            {
+                "title": "Wird Tahajjud",
+                "icon": "🌌",
+                "color": "#8B5CF6",
+                "schedule_type": "custom",
+                "target_days": None,
+                "items": [
+                    ("Witr + Shaf' + 2 rak'a", "1x", 1, "fois", 300, "🌙"),
+                    ("Dua Qunut", "1x", 1, "fois", 60, "📖"),
+                    ("Dua personnalisée", "1x", 1, "fois", 120, "🤲"),
+                    ("Istighfar prolongé", "100x", 100, "fois", 180, "🤍"),
+                ]
+            },
+            {
+                "title": "Wird Jumu'a",
+                "icon": "🕌",
+                "color": "#EC4899",
+                "schedule_type": "custom",
+                "target_days": "5",
+                "items": [
+                    ("Ghusl", "1x", 1, "fois", 600, "🚿"),
+                    ("Surah Al-Kahf", "1x", 1, "fois", 900, "📖"),
+                    ("Salat Doha", "2 rak'a", 1, "fois", 300, "☀️"),
+                    ("Beaucoup de Salat sur le Prophète ﷺ", "100x", 100, "fois", 300, "💚"),
+                    ("Dua entre Dhuhr et Asr", "1x", 1, "fois", 300, "🤲"),
+                ]
+            },
+        ]
+        
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # Vérifier si templates existent déjà
+            cursor.execute("SELECT COUNT(*) FROM wirds WHERE is_template = 1")
+            if cursor.fetchone()[0] > 0:
+                return
+            
+            for template in templates:
+                cursor.execute("""
+                    INSERT INTO wirds (title, icon, color, schedule_type, target_days, is_template)
+                    VALUES (?, ?, ?, ?, ?, 1)
+                """, (template["title"], template["icon"], template["color"], 
+                    template["schedule_type"], template.get("target_days")))
+                wird_id = cursor.lastrowid
+                
+                for idx, (title, desc, count, unit, duration, icon) in enumerate(template["items"]):
+                    cursor.execute("""
+                        INSERT INTO wird_items (wird_id, title, description, icon, target_count, unit, duration_seconds, order_index)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (wird_id, title, desc, icon, count, unit, duration, idx))
+            
+            conn.commit()
+            print(f"✅ {len(templates)} templates Wird créés")
