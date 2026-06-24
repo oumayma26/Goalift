@@ -5,11 +5,13 @@ Couche métier avec tri par progression, filtre terminés et images.
 
 import os
 import shutil
+import uuid
 from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
 from database.database import DatabaseManager
 from models.goal import Goal, Task
+from utils.paths import get_uploads_dir
 
 
 class GoalService:
@@ -215,21 +217,20 @@ class GoalService:
 
     def save_goal_image(self, goal_id: int, source_path: str) -> str:
         """
-        Copie l'image dans le dossier assets et retourne le chemin relatif.
+        Copie l'image dans le dossier persistant et retourne le chemin absolu.
         """
         if not source_path or not os.path.exists(source_path):
             return None
 
-        assets_dir = Path("assets/goals")
-        assets_dir.mkdir(parents=True, exist_ok=True)
+        goals_dir = Path(get_uploads_dir("goals"))
 
-        ext = Path(source_path).suffix
-        filename = f"goal_{goal_id}{ext}"
-        dest_path = assets_dir / filename
+        ext = Path(source_path).suffix or ".jpg"
+        filename = f"goal_{goal_id}_{uuid.uuid4().hex[:8]}{ext}"
+        dest_path = goals_dir / filename
 
         shutil.copy2(source_path, dest_path)
 
-        return str(dest_path)
+        return str(dest_path.resolve())
 
     def delete_goal_image(self, image_path: str) -> None:
         """Supprime l'image du disque."""

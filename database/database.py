@@ -5,9 +5,13 @@ Couche d'accès aux données SQLite.
 
 import sqlite3
 import os
+import sys
+from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+from utils.paths import get_db_path
+
 
 
 class DatabaseManager:
@@ -15,12 +19,26 @@ class DatabaseManager:
     Gestionnaire singleton de la base de données SQLite.
     """
 
-    def __init__(self, db_path: str = "database.db") -> None:
-        self.db_path: str = db_path
+    def __init__(self, db_path: Optional[str] = None) -> None:
+        if db_path is None:
+            db_path = os.path.join(get_db_path(), "database.db")
+        
+        # Chemin absolu normalisé
+        self.db_path: str = str(Path(db_path).resolve())
+        
+        # Création du dossier parent
+        db_dir = Path(self.db_path).parent
+        db_dir.mkdir(parents=True, exist_ok=True)
+        
+        print(f"[DatabaseManager] DB path: {self.db_path}")
+        print(f"[DatabaseManager] DB dir: {db_dir}")
+        print(f"[DatabaseManager] DB dir exists: {db_dir.exists()}")
+        
         self._init_database()
 
     @contextmanager
     def _get_connection(self):
+        print(f"[DatabaseManager] Connecting to: {self.db_path}")
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
@@ -38,6 +56,7 @@ class DatabaseManager:
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
+            # ─── TABLES PRINCIPALES ───
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS goals (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,7 +120,7 @@ class DatabaseManager:
                     opacity INTEGER DEFAULT 0
                 )
             """)
-        
+
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS vision_board_mood (
                     id INTEGER PRIMARY KEY,
@@ -116,8 +135,8 @@ class DatabaseManager:
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
 
+            # ─── INDEXES ───
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_tasks_goal_id ON tasks(goal_id)
             """)
@@ -134,17 +153,14 @@ class DatabaseManager:
                 CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at)
             """)
 
-            # Migration : ajouter colonne color si elle n'existe pas (pour DB existante)
+            # ─── MIGRATION : colonnes color et image_path ───
             try:
                 cursor.execute("SELECT color FROM goals LIMIT 1")
             except sqlite3.OperationalError:
                 cursor.execute("ALTER TABLE goals ADD COLUMN color TEXT DEFAULT '#3B82F6'")
                 cursor.execute("ALTER TABLE goals ADD COLUMN image_path TEXT")
-                conn.commit()
 
-            
-            conn.commit()
-
+            # ─── HABITS ───
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS habits (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -176,9 +192,8 @@ class DatabaseManager:
             """)
 
             cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_habits_task ON habits(task_id);
+                CREATE INDEX IF NOT EXISTS idx_habits_task ON habits(task_id)
             """)
-
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON habit_logs(habit_id, log_date)
             """)
@@ -189,11 +204,7 @@ class DatabaseManager:
                 CREATE INDEX IF NOT EXISTS idx_habits_archived ON habits(archived_at)
             """)
 
-
-            # ═══════════════════════════════════════════════════
-            # WIRD (Programmes spirituels personnalisés)
-            # ═══════════════════════════════════════════════════
-
+            # ─── WIRD ───
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS wirds (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -612,7 +623,7 @@ class DatabaseManager:
                 GROUP BY status
             """)
             return {row[0]: row[1] for row in cursor.fetchall()}
-        
+
 
     # ═══════════════════════════════════════════════════
     # HABITS
@@ -809,7 +820,7 @@ class DatabaseManager:
         """Stats pour un mois donné."""
         from calendar import monthrange
         total_days = monthrange(year, month)[1]
-        
+
         start = f"{year}-{month:02d}-01"
         end = f"{year}-{month:02d}-{total_days:02d}"
 
@@ -834,7 +845,7 @@ class DatabaseManager:
                 "total_logged": done + missed + partial,
                 "rate": round(done / total_days * 100, 1) if total_days else 0
             }
-        
+
     # ═══════════════════════════════════════════════════
     # WIRD METHODS
     # ═══════════════════════════════════════════════════
@@ -903,12 +914,12 @@ class DatabaseManager:
             cursor = conn.cursor()
             query = "SELECT * FROM wirds WHERE 1=1"
             params = []
-            
+
             if not include_templates:
                 query += " AND is_template = 0"
             if not include_archived:
                 query += " AND archived_at IS NULL"
-                
+
             query += " ORDER BY is_template DESC, created_at DESC"
             cursor.execute(query, params)
             return cursor.fetchall()
@@ -918,15 +929,15 @@ class DatabaseManager:
         allowed = ['title', 'description', 'icon', 'color', 'schedule_type', 'target_days', 'is_active']
         updates = []
         params = []
-        
+
         for key, value in kwargs.items():
             if key in allowed:
                 updates.append(f"{key} = ?")
                 params.append(value)
-        
+
         if not updates:
             return False
-            
+
         params.append(wird_id)
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -956,7 +967,7 @@ class DatabaseManager:
         """Démarre une nouvelle session de Wird."""
         now = datetime.now()
         today = now.strftime("%Y-%m-%d")
-        
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
             # Vérifier si session déjà en cours aujourd'hui
@@ -967,11 +978,11 @@ class DatabaseManager:
             existing = cursor.fetchone()
             if existing:
                 return existing["id"]
-                
+
             # Compter les items
             cursor.execute("SELECT COUNT(*) FROM wird_items WHERE wird_id = ?", (wird_id,))
             total_items = cursor.fetchone()[0]
-            
+
             cursor.execute("""
                 INSERT INTO wird_sessions (wird_id, session_date, started_at, items_total, status)
                 VALUES (?, ?, ?, ?, 'in_progress')
@@ -989,14 +1000,14 @@ class DatabaseManager:
                 INSERT INTO wird_session_logs (session_id, item_id, completed_at, actual_count, duration_seconds, status, note)
                 VALUES (?, ?, ?, ?, ?, 'completed', ?)
             """, (session_id, item_id, now, actual_count, duration_seconds, note))
-            
+
             # Mettre à jour le compteur de la session
             cursor.execute("""
                 UPDATE wird_sessions 
                 SET items_completed = items_completed + 1
                 WHERE id = ?
             """, (session_id,))
-            
+
             return cursor.lastrowid
 
     def skip_wird_item(self, session_id: int, item_id: int, note: Optional[str] = None) -> None:
@@ -1014,14 +1025,14 @@ class DatabaseManager:
         now = datetime.now()
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            
+
             # Calculer la durée totale
             cursor.execute("SELECT started_at FROM wird_sessions WHERE id = ?", (session_id,))
             row = cursor.fetchone()
             if row:
                 started = datetime.fromisoformat(row["started_at"])
                 duration = int((now - started).total_seconds())
-                
+
                 cursor.execute("""
                     UPDATE wird_sessions 
                     SET completed_at = ?, total_duration_seconds = ?, status = 'completed', mood_after = ?, note = ?
@@ -1041,10 +1052,10 @@ class DatabaseManager:
                 WHERE ws.id = ?
             """, (session_id,))
             session = cursor.fetchone()
-            
+
             if not session:
                 return {}
-                
+
             cursor.execute("""
                 SELECT wi.*, wsl.status as log_status, wsl.actual_count, wsl.note as log_note
                 FROM wird_items wi
@@ -1053,10 +1064,10 @@ class DatabaseManager:
                 ORDER BY wi.order_index
             """, (session_id, session["wird_id"]))
             items = cursor.fetchall()
-            
+
             completed = sum(1 for i in items if i["log_status"] == "completed")
             skipped = sum(1 for i in items if i["log_status"] == "skipped")
-            
+
             return {
                 "session": dict(session),
                 "items": [dict(i) for i in items],
@@ -1071,7 +1082,7 @@ class DatabaseManager:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-            
+
             cursor.execute("""
                 SELECT 
                     COUNT(*) as total_sessions,
@@ -1082,7 +1093,7 @@ class DatabaseManager:
                 WHERE wird_id = ? AND session_date >= ?
             """, (wird_id, start_date))
             stats = cursor.fetchone()
-            
+
             # Streak actuel
             cursor.execute("""
                 SELECT session_date, status 
@@ -1091,14 +1102,14 @@ class DatabaseManager:
                 ORDER BY session_date DESC
             """, (wird_id,))
             sessions = cursor.fetchall()
-            
+
             streak = 0
             for s in sessions:
                 if s["status"] == "completed":
                     streak += 1
                 else:
                     break
-                    
+
             return {
                 "total_sessions": stats["total_sessions"] or 0,
                 "completed_sessions": stats["completed_sessions"] or 0,
@@ -1199,14 +1210,14 @@ class DatabaseManager:
                 ]
             },
         ]
-        
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
             # Vérifier si templates existent déjà
             cursor.execute("SELECT COUNT(*) FROM wirds WHERE is_template = 1")
             if cursor.fetchone()[0] > 0:
                 return
-            
+
             for template in templates:
                 cursor.execute("""
                     INSERT INTO wirds (title, icon, color, schedule_type, target_days, is_template)
@@ -1214,12 +1225,12 @@ class DatabaseManager:
                 """, (template["title"], template["icon"], template["color"], 
                     template["schedule_type"], template.get("target_days")))
                 wird_id = cursor.lastrowid
-                
+
                 for idx, (title, desc, count, unit, duration, icon) in enumerate(template["items"]):
                     cursor.execute("""
                         INSERT INTO wird_items (wird_id, title, description, icon, target_count, unit, duration_seconds, order_index)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (wird_id, title, desc, icon, count, unit, duration, idx))
-            
+
             conn.commit()
             print(f"✅ {len(templates)} templates Wird créés")

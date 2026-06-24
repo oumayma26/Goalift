@@ -1,0 +1,10 @@
+{
+  "version": "1.0.0",
+  "url": "https://ton-site.com/downloads/Goalift.exe",
+  "checksum": "4c62be023bffce7182354e23146d7702ca76b902a79885a2ace86d8a825dc9a3",
+  "size_bytes": 46132143,
+  "release_notes": "\ud83d\ude80 Nouveau : Goalift v1.0.0\n- Gestion de buts et vision board\n- Interface moderne avec customtkinter",
+  "min_version": "1.0.0",
+  "mandatory": false,
+  "published_at": "2026-06-24T14:46:54.608418"
+}

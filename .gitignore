@@ -61,3 +61,7 @@ assets/goals/*
 
 venv/*
 .venv/*
+nsis_portable/*
+installer/*
+*.exe
+data/*

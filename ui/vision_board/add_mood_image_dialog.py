@@ -5,6 +5,8 @@ Dialogue pour ajouter une image au Mood Board.
 """
 
 import os
+import shutil
+import uuid
 import urllib.request
 import urllib.parse
 from pathlib import Path
@@ -15,6 +17,7 @@ import customtkinter as ctk
 from PIL import Image, ImageTk
 
 from services.unsplash_service import UnsplashService
+from utils.paths import get_app_data_dir, get_uploads_dir
 
 
 class AddMoodImageDialog(ctk.CTkToplevel):
@@ -385,13 +388,13 @@ class AddMoodImageDialog(ctk.CTkToplevel):
     def _on_add(self):
         """Ajoute l'image sélectionnée."""
         if self.selected_image_path and self.on_image_selected:
-            # 📁 Copier l'image dans assets/mood_images/ avant de nettoyer
-            final_path = self._copy_to_assets(self.selected_image_path)
+            # 📁 Copier l'image dans le dossier persistant avant de nettoyer
+            final_path = self._copy_to_persist(self.selected_image_path)
 
             if final_path and os.path.exists(final_path):
                 # ✅ Copie réussie, utiliser le nouveau path
                 self.on_image_selected(final_path, self.selected_title)
-                # 🧹 Nettoyer les temporaires (l'originale est dans assets/)
+                # 🧹 Nettoyer les temporaires (l'originale est dans uploads/)
                 self._cleanup_downloaded()
             else:
                 # ⚠️ Copie échouée, garder l'original
@@ -404,29 +407,21 @@ class AddMoodImageDialog(ctk.CTkToplevel):
 
         self.destroy()
 
-    def _copy_to_assets(self, source_path: str) -> Optional[str]:
-        """Copie l'image dans assets/mood_images/ et retourne le path absolu."""
+    def _copy_to_persist(self, source_path: str) -> Optional[str]:
+        """Copie l'image dans le dossier persistant et retourne le path absolu."""
         try:
-            import shutil
-            from pathlib import Path
+            # Dossier PERSISTANT (pas dans le bundle PyInstaller)
+            mood_dir = Path(get_uploads_dir("mood_images"))
 
-            # Créer le dossier s'il n'existe pas (path absolu)
-            assets_dir = Path(os.getcwd()) / "assets" / "mood_images"
-            assets_dir.mkdir(parents=True, exist_ok=True)
-
-            # Générer un nom unique
-            import uuid
             ext = Path(source_path).suffix or ".jpg"
             filename = f"mood_{uuid.uuid4().hex[:8]}{ext}"
-            dest_path = assets_dir / filename
+            dest_path = mood_dir / filename
 
-            # Copier
             shutil.copy2(source_path, dest_path)
-
-            # Retourner le path absolu
             return str(dest_path.resolve())
+
         except Exception as e:
-            print(f"⚠️ Erreur copie vers assets: {e}")
+            print(f"⚠️ Erreur copie: {e}")
             return None
 
     def _cleanup_downloaded(self):
@@ -442,8 +437,7 @@ class AddMoodImageDialog(ctk.CTkToplevel):
 
         # 🧹 Supprimer aussi les fichiers JSON de cache Unsplash
         try:
-            import glob
-            cache_dir = Path("assets/unsplash_cache")
+            cache_dir = Path(get_app_data_dir()) / "unsplash_cache"
             if cache_dir.exists():
                 for json_file in cache_dir.glob("*.json"):
                     try:
